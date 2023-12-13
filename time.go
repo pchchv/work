@@ -10,3 +10,11 @@ func nowEpochSeconds() int64 {
 	}
 	return time.Now().Unix()
 }
+
+func setNowEpochSecondsMock(t int64) {
+	nowMock = t
+}
+
+func resetNowEpochSecondsMock() {
+	nowMock = 0
+}
