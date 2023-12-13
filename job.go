@@ -1,5 +1,7 @@
 package work
 
+import "encoding/json"
+
 // Q is a shortcut to easily specify arguments for jobs when enqueueing them.
 // Example: e.Enqueue("send_email", work.Q{"addr": "test@example.com", "track": true})
 type Q map[string]interface{}
@@ -22,4 +24,16 @@ type Job struct {
 	observer     *observer
 	inProgQueue  []byte
 	dequeuedFrom []byte
+}
+
+func newJob(rawJSON, dequeuedFrom, inProgQueue []byte) (*Job, error) {
+	var job Job
+	if err := json.Unmarshal(rawJSON, &job); err != nil {
+		return nil, err
+	}
+
+	job.rawJSON = rawJSON
+	job.dequeuedFrom = dequeuedFrom
+	job.inProgQueue = inProgQueue
+	return &job, nil
 }
