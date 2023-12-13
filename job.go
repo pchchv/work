@@ -37,3 +37,15 @@ func newJob(rawJSON, dequeuedFrom, inProgQueue []byte) (*Job, error) {
 	job.inProgQueue = inProgQueue
 	return &job, nil
 }
+
+func (j *Job) serialize() ([]byte, error) {
+	return json.Marshal(j)
+}
+
+// setArg sets a single named argument on the job.
+func (j *Job) setArg(key string, val interface{}) {
+	if j.Args == nil {
+		j.Args = make(map[string]interface{})
+	}
+	j.Args[key] = val
+}
