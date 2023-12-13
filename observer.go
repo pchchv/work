@@ -2,6 +2,12 @@ package work
 
 import "github.com/gomodule/redigo/redis"
 
+const (
+	observationKindStarted observationKind = iota
+	observationKindDone
+	observationKindCheckin
+)
+
 type observationKind int
 
 type observation struct {
@@ -38,4 +44,14 @@ type observer struct {
 	doneStoppingChan   chan struct{}
 	drainChan          chan struct{}
 	doneDrainingChan   chan struct{}
+}
+
+func (o *observer) observeCheckin(jobName, jobID, checkin string) {
+	o.observationsChan <- &observation{
+		kind:      observationKindCheckin,
+		jobName:   jobName,
+		jobID:     jobID,
+		checkin:   checkin,
+		checkinAt: nowEpochSeconds(),
+	}
 }
