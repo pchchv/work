@@ -1,6 +1,10 @@
 package work
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"reflect"
+)
 
 // Q is a shortcut to easily specify arguments for jobs when enqueueing them.
 // Example: e.Enqueue("send_email", work.Q{"addr": "test@example.com", "track": true})
@@ -65,4 +69,13 @@ func (j *Job) Checkin(msg string) {
 	if j.observer != nil {
 		j.observer.observeCheckin(j.Name, j.ID, msg)
 	}
+}
+
+func typecastError(jsonType, key string, v interface{}) error {
+	actualType := reflect.TypeOf(v)
+	return fmt.Errorf("looking for a %s in job.Arg[%s] but value wasn't right type: %v(%v)", jsonType, key, actualType, v)
+}
+
+func missingKeyError(jsonType, key string) error {
+	return fmt.Errorf("looking for a %s in job.Arg[%s] but key wasn't found", jsonType, key)
 }
