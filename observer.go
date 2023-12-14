@@ -190,3 +190,17 @@ func (o *observer) loop() {
 		}
 	}
 }
+
+func (o *observer) start() {
+	go o.loop()
+}
+
+func (o *observer) stop() {
+	o.stopChan <- struct{}{}
+	<-o.doneStoppingChan
+}
+
+func (o *observer) drain() {
+	o.drainChan <- struct{}{}
+	<-o.doneDrainingChan
+}
