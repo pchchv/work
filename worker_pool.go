@@ -1,5 +1,7 @@
 package work
 
+import "reflect"
+
 // You may provide your own backoff function for retrying failed jobs or use the builtin one.
 // Returns the number of seconds to wait until the next attempt.
 //
@@ -25,3 +27,9 @@ type GenericMiddlewareHandler func(*Job, NextMiddlewareFunc) error
 // (whose instances are named 'next')
 // that you call to advance to the next middleware.
 type NextMiddlewareFunc func() error
+
+type middlewareHandler struct {
+	IsGeneric                bool
+	DynamicMiddleware        reflect.Value
+	GenericMiddlewareHandler GenericMiddlewareHandler
+}
