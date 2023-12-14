@@ -204,3 +204,13 @@ func (o *observer) drain() {
 	o.drainChan <- struct{}{}
 	<-o.doneDrainingChan
 }
+
+func (o *observer) observeStarted(jobName, jobID string, arguments map[string]interface{}) {
+	o.observationsChan <- &observation{
+		kind:      observationKindStarted,
+		jobName:   jobName,
+		jobID:     jobID,
+		startedAt: nowEpochSeconds(),
+		arguments: arguments,
+	}
+}
