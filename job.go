@@ -71,6 +71,25 @@ func (j *Job) Checkin(msg string) {
 	}
 }
 
+// ArgString returns j.Args[key] typed to a string.
+// If the key is missing or of the wrong type, it sets an argument error
+// on the job. This function is meant to be used in
+// the body of a job handling function while extracting arguments,
+// followed by a single call to j.ArgError().
+func (j *Job) ArgString(key string) string {
+	v, ok := j.Args[key]
+	if ok {
+		typedV, ok := v.(string)
+		if ok {
+			return typedV
+		}
+		j.argError = typecastError("string", key, v)
+	} else {
+		j.argError = missingKeyError("string", key)
+	}
+	return ""
+}
+
 func typecastError(jsonType, key string, v interface{}) error {
 	actualType := reflect.TypeOf(v)
 	return fmt.Errorf("looking for a %s in job.Arg[%s] but value wasn't right type: %v(%v)", jsonType, key, actualType, v)
