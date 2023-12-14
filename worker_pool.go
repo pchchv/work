@@ -14,3 +14,6 @@ type JobOptions struct {
 	MaxConcurrency uint              // Max number of jobs to keep in flight (default is 0, meaning no max)
 	Backoff        BackoffCalculator // If not set, uses the default backoff algorithm
 }
+
+// GenericHandler is a job handler without any custom context.
+type GenericHandler func(*Job) error
