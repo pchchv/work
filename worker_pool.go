@@ -33,3 +33,8 @@ type middlewareHandler struct {
 	DynamicMiddleware        reflect.Value
 	GenericMiddlewareHandler GenericMiddlewareHandler
 }
+
+// WorkerPoolOptions can be passed to NewWorkerPoolWithOptions.
+type WorkerPoolOptions struct {
+	SleepBackoffs []int64 // Sleep backoffs in milliseconds
+}
