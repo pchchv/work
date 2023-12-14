@@ -3,6 +3,7 @@ package work
 import "github.com/gomodule/redigo/redis"
 
 const (
+	observerBufferSize                     = 1024
 	observationKindStarted observationKind = iota
 	observationKindDone
 	observationKindCheckin
@@ -44,6 +45,19 @@ type observer struct {
 	doneStoppingChan   chan struct{}
 	drainChan          chan struct{}
 	doneDrainingChan   chan struct{}
+}
+
+func newObserver(namespace string, pool *redis.Pool, workerID string) *observer {
+	return &observer{
+		namespace:        namespace,
+		workerID:         workerID,
+		pool:             pool,
+		observationsChan: make(chan *observation, observerBufferSize),
+		stopChan:         make(chan struct{}),
+		doneStoppingChan: make(chan struct{}),
+		drainChan:        make(chan struct{}),
+		doneDrainingChan: make(chan struct{}),
+	}
 }
 
 func (o *observer) observeCheckin(jobName, jobID, checkin string) {
