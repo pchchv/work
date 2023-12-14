@@ -2,6 +2,7 @@ package work
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -125,4 +126,28 @@ func (o *observer) writeStatus(obv *observation) error {
 		}
 	}
 	return nil
+}
+
+func (o *observer) process(obv *observation) {
+	if obv.kind == observationKindStarted {
+		o.currentStartedObservation = obv
+	} else if obv.kind == observationKindDone {
+		o.currentStartedObservation = nil
+	} else if obv.kind == observationKindCheckin {
+		if (o.currentStartedObservation != nil) && (obv.jobID == o.currentStartedObservation.jobID) {
+			o.currentStartedObservation.checkin = obv.checkin
+			o.currentStartedObservation.checkinAt = obv.checkinAt
+		} else {
+			logError("observer.checkin_mismatch", errors.New("got checkin but mismatch on job ID or no job"))
+		}
+	}
+	o.version++
+
+	// If this is the version observation we got, just go ahead and write it.
+	if o.version == 1 {
+		if err := o.writeStatus(o.currentStartedObservation); err != nil {
+			logError("observer.first_write", err)
+		}
+		o.lastWrittenVersion = o.version
+	}
 }
