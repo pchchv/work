@@ -121,6 +121,29 @@ func (j *Job) ArgInt64(key string) int64 {
 	return 0
 }
 
+// ArgFloat64 returns j.Args[key] typed to a float64.
+// If the key is missing or of the wrong type, it sets an argument error
+// on the job. This function is meant to be used in
+// the body of a job handling function while extracting arguments,
+// followed by a single call to j.ArgError().
+func (j *Job) ArgFloat64(key string) float64 {
+	v, ok := j.Args[key]
+	if ok {
+		rVal := reflect.ValueOf(v)
+		if isIntKind(rVal) {
+			return float64(rVal.Int())
+		} else if isUintKind(rVal) {
+			return float64(rVal.Uint())
+		} else if isFloatKind(rVal) {
+			return rVal.Float()
+		}
+		j.argError = typecastError("float64", key, v)
+	} else {
+		j.argError = missingKeyError("float64", key)
+	}
+	return 0.0
+}
+
 func typecastError(jsonType, key string, v interface{}) error {
 	actualType := reflect.TypeOf(v)
 	return fmt.Errorf("looking for a %s in job.Arg[%s] but value wasn't right type: %v(%v)", jsonType, key, actualType, v)
