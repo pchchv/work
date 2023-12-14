@@ -31,3 +31,11 @@ func redisKeyJobsInProgress(namespace, poolID, jobName string) string {
 func redisKeyJobsLock(namespace, jobName string) string {
 	return redisKeyJobs(namespace, jobName) + ":lock"
 }
+
+func redisKeyJobsPaused(namespace, jobName string) string {
+	return redisKeyJobs(namespace, jobName) + ":paused"
+}
+
+func redisKeyJobsLockInfo(namespace, jobName string) string {
+	return redisKeyJobs(namespace, jobName) + ":lock_info"
+}
