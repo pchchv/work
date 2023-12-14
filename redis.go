@@ -11,3 +11,13 @@ func redisNamespacePrefix(namespace string) string {
 func redisKeyWorkerObservation(namespace, workerID string) string {
 	return redisNamespacePrefix(namespace) + "worker:" + workerID
 }
+
+// returns "<namespace>:jobs:"
+// so that we can just append the job name and be good to go
+func redisKeyJobsPrefix(namespace string) string {
+	return redisNamespacePrefix(namespace) + "jobs:"
+}
+
+func redisKeyJobs(namespace, jobName string) string {
+	return redisKeyJobsPrefix(namespace) + jobName
+}
