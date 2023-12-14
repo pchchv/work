@@ -38,3 +38,11 @@ type middlewareHandler struct {
 type WorkerPoolOptions struct {
 	SleepBackoffs []int64 // Sleep backoffs in milliseconds
 }
+
+type jobType struct {
+	Name string
+	JobOptions
+	IsGeneric      bool
+	GenericHandler GenericHandler
+	DynamicHandler reflect.Value
+}
