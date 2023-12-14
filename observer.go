@@ -3,6 +3,7 @@ package work
 import (
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -149,5 +150,43 @@ func (o *observer) process(obv *observation) {
 			logError("observer.first_write", err)
 		}
 		o.lastWrittenVersion = o.version
+	}
+}
+
+func (o *observer) loop() {
+	// Every tick we'll update redis if necessary
+	// We don't update it on every job because
+	// the only purpose of this data is for humans to inspect the system,
+	// and a fast worker could move onto new jobs every few ms.
+	ticker := time.Tick(1000 * time.Millisecond)
+	for {
+		select {
+		case <-o.stopChan:
+			o.doneStoppingChan <- struct{}{}
+			return
+		case <-o.drainChan:
+		DRAIN_LOOP:
+			for {
+				select {
+				case obv := <-o.observationsChan:
+					o.process(obv)
+				default:
+					if err := o.writeStatus(o.currentStartedObservation); err != nil {
+						logError("observer.write", err)
+					}
+					o.doneDrainingChan <- struct{}{}
+					break DRAIN_LOOP
+				}
+			}
+		case <-ticker:
+			if o.lastWrittenVersion != o.version {
+				if err := o.writeStatus(o.currentStartedObservation); err != nil {
+					logError("observer.write", err)
+				}
+				o.lastWrittenVersion = o.version
+			}
+		case obv := <-o.observationsChan:
+			o.process(obv)
+		}
 	}
 }
