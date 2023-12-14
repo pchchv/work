@@ -214,3 +214,12 @@ func (o *observer) observeStarted(jobName, jobID string, arguments map[string]in
 		arguments: arguments,
 	}
 }
+
+func (o *observer) observeDone(jobName, jobID string, err error) {
+	o.observationsChan <- &observation{
+		kind:    observationKindDone,
+		jobName: jobName,
+		jobID:   jobID,
+		err:     err,
+	}
+}
