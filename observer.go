@@ -1,6 +1,10 @@
 package work
 
-import "github.com/gomodule/redigo/redis"
+import (
+	"encoding/json"
+
+	"github.com/gomodule/redigo/redis"
+)
 
 const (
 	observerBufferSize                     = 1024
@@ -68,4 +72,57 @@ func (o *observer) observeCheckin(jobName, jobID, checkin string) {
 		checkin:   checkin,
 		checkinAt: nowEpochSeconds(),
 	}
+}
+
+func (o *observer) writeStatus(obv *observation) error {
+	conn := o.pool.Get()
+	defer conn.Close()
+	key := redisKeyWorkerObservation(o.namespace, o.workerID)
+
+	if obv == nil {
+		if _, err := conn.Do("DEL", key); err != nil {
+			return err
+		}
+	} else {
+		// hash:
+		// job_name -> obv.Name
+		// job_id -> obv.jobID
+		// started_at -> obv.startedAt
+		// args -> json.Encode(obv.arguments)
+		// checkin -> obv.checkin
+		// checkin_at -> obv.checkinAt
+		var argsJSON []byte
+		if len(obv.arguments) == 0 {
+			argsJSON = []byte("")
+		} else {
+			var err error
+			argsJSON, err = json.Marshal(obv.arguments)
+			if err != nil {
+				return err
+			}
+		}
+
+		args := make([]interface{}, 0, 13)
+		args = append(args,
+			key,
+			"job_name", obv.jobName,
+			"job_id", obv.jobID,
+			"started_at", obv.startedAt,
+			"args", argsJSON,
+		)
+
+		if (obv.checkin != "") && (obv.checkinAt > 0) {
+			args = append(args,
+				"checkin", obv.checkin,
+				"checkin_at", obv.checkinAt,
+			)
+		}
+
+		conn.Send("HMSET", args...)
+		conn.Send("EXPIRE", key, 60*60*24)
+		if err := conn.Flush(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
