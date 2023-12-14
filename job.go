@@ -144,6 +144,31 @@ func (j *Job) ArgFloat64(key string) float64 {
 	return 0.0
 }
 
+// ArgBool returns j.Args[key] typed to a bool.
+// If the key is missing or of the wrong type, it sets an argument error
+// on the job. This function is meant to be used in
+// the body of a job handling function while extracting arguments,
+// followed by a single call to j.ArgError().
+func (j *Job) ArgBool(key string) bool {
+	v, ok := j.Args[key]
+	if ok {
+		typedV, ok := v.(bool)
+		if ok {
+			return typedV
+		}
+		j.argError = typecastError("bool", key, v)
+	} else {
+		j.argError = missingKeyError("bool", key)
+	}
+	return false
+}
+
+// ArgError returns the last error generated when extracting typed params.
+// Returns nil if extracting the args went fine.
+func (j *Job) ArgError() error {
+	return j.argError
+}
+
 func typecastError(jsonType, key string, v interface{}) error {
 	actualType := reflect.TypeOf(v)
 	return fmt.Errorf("looking for a %s in job.Arg[%s] but value wasn't right type: %v(%v)", jsonType, key, actualType, v)
