@@ -10,3 +10,8 @@ type sampleItem struct {
 	redisJobsLockInfo       string
 	redisJobsMaxConcurrency string
 }
+
+type prioritySampler struct {
+	sum     uint
+	samples []sampleItem
+}
