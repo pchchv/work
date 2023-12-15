@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -244,6 +245,47 @@ func (w *worker) processJob(job *Job) {
 		fate = w.jobFate(jt, job)
 	}
 	w.removeJobFromInProgress(job, fate)
+}
+
+func (w *worker) loop() {
+	var drained bool
+	var consequtiveNoJobs int64
+
+	// Begin immediately. We'll change the duration on each tick with a timer.Reset()
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-w.stopChan:
+			w.doneStoppingChan <- struct{}{}
+			return
+		case <-w.drainChan:
+			drained = true
+			timer.Reset(0)
+		case <-timer.C:
+			job, err := w.fetchJob()
+			if err != nil {
+				logError("worker.fetch", err)
+				timer.Reset(10 * time.Millisecond)
+			} else if job != nil {
+				w.processJob(job)
+				consequtiveNoJobs = 0
+				timer.Reset(0)
+			} else {
+				if drained {
+					w.doneDrainingChan <- struct{}{}
+					drained = false
+				}
+				consequtiveNoJobs++
+				idx := consequtiveNoJobs
+				if idx >= int64(len(w.sleepBackoffs)) {
+					idx = int64(len(w.sleepBackoffs)) - 1
+				}
+				timer.Reset(time.Duration(w.sleepBackoffs[idx]) * time.Millisecond)
+			}
+		}
+	}
 }
 
 // Default algorithm returns a fastly increasing unboundedly fashion backoff counter.
