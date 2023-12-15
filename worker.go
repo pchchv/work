@@ -188,6 +188,20 @@ func (w *worker) getAndDeleteUniqueJob(job *Job) *Job {
 	return jobWithArgs
 }
 
+func (w *worker) removeJobFromInProgress(job *Job, fate terminateOp) {
+	conn := w.pool.Get()
+	defer conn.Close()
+
+	conn.Send("MULTI")
+	conn.Send("LREM", job.inProgQueue, 1, job.rawJSON)
+	conn.Send("DECR", redisKeyJobsLock(w.namespace, job.Name))
+	conn.Send("HINCRBY", redisKeyJobsLockInfo(w.namespace, job.Name), w.poolID, -1)
+	fate(conn)
+	if _, err := conn.Do("EXEC"); err != nil {
+		logError("worker.remove_job_from_in_progress.lrem", err)
+	}
+}
+
 // Default algorithm returns a fastly increasing unboundedly fashion backoff counter.
 func defaultBackoffCalculator(job *Job) int64 {
 	fails := job.Fails
