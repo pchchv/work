@@ -22,3 +22,15 @@ type deadPoolReaper struct {
 	stopChan         chan struct{}
 	doneStoppingChan chan struct{}
 }
+
+func newDeadPoolReaper(namespace string, pool *redis.Pool, curJobTypes []string) *deadPoolReaper {
+	return &deadPoolReaper{
+		namespace:        namespace,
+		pool:             pool,
+		deadTime:         deadTime,
+		reapPeriod:       reapPeriod,
+		curJobTypes:      curJobTypes,
+		stopChan:         make(chan struct{}),
+		doneStoppingChan: make(chan struct{}),
+	}
+}
