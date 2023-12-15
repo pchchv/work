@@ -187,3 +187,12 @@ func (r *deadPoolReaper) loop() {
 		}
 	}
 }
+
+func (r *deadPoolReaper) start() {
+	go r.loop()
+}
+
+func (r *deadPoolReaper) stop() {
+	r.stopChan <- struct{}{}
+	<-r.doneStoppingChan
+}
