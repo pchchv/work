@@ -7,6 +7,8 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+const periodicEnqueuerSleep = 2 * time.Minute
+
 type periodicJob struct {
 	spec     string
 	jobName  string
@@ -36,4 +38,19 @@ func newPeriodicEnqueuer(namespace string, pool *redis.Pool, periodicJobs []*per
 		stopChan:         make(chan struct{}),
 		doneStoppingChan: make(chan struct{}),
 	}
+}
+
+func (pe *periodicEnqueuer) shouldEnqueue() bool {
+	conn := pe.pool.Get()
+	defer conn.Close()
+
+	lastEnqueue, err := redis.Int64(conn.Do("GET", redisKeyLastPeriodicEnqueue(pe.namespace)))
+	if err == redis.ErrNil {
+		return true
+	} else if err != nil {
+		logError("periodic_enqueuer.should_enqueue", err)
+		return true
+	}
+
+	return lastEnqueue < (nowEpochSeconds() - int64(periodicEnqueuerSleep/time.Minute))
 }
