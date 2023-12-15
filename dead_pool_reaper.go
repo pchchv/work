@@ -108,3 +108,59 @@ func (r *deadPoolReaper) requeueInProgressJobs(poolID string, jobTypes []string)
 		}
 	}
 }
+
+func (r *deadPoolReaper) cleanStaleLockInfo(poolID string, jobTypes []string) error {
+	numKeys := len(jobTypes) * 2
+	scriptArgs := make([]interface{}, 0, numKeys+1) // +1 for argv[1]
+	redisReapLocksScript := redis.NewScript(numKeys, redisLuaReapStaleLocks)
+
+	for _, jobType := range jobTypes {
+		scriptArgs = append(scriptArgs, redisKeyJobsLock(r.namespace, jobType), redisKeyJobsLockInfo(r.namespace, jobType))
+	}
+	scriptArgs = append(scriptArgs, poolID) // ARGV[1]
+
+	conn := r.pool.Get()
+	defer conn.Close()
+	if _, err := redisReapLocksScript.Do(conn, scriptArgs...); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *deadPoolReaper) reap() error {
+	// Get dead pools
+	deadPoolIDs, err := r.findDeadPools()
+	if err != nil {
+		return err
+	}
+
+	conn := r.pool.Get()
+	defer conn.Close()
+
+	workerPoolsKey := redisKeyWorkerPools(r.namespace)
+
+	// Cleanup all dead pools
+	for deadPoolID, jobTypes := range deadPoolIDs {
+		lockJobTypes := jobTypes
+		// if we found jobs from the heartbeat, requeue them and remove the heartbeat
+		if len(jobTypes) > 0 {
+			r.requeueInProgressJobs(deadPoolID, jobTypes)
+			if _, err = conn.Do("DEL", redisKeyHeartbeat(r.namespace, deadPoolID)); err != nil {
+				return err
+			}
+		} else {
+			// try to clean up locks for the current set of jobs if heartbeat was not found
+			lockJobTypes = r.curJobTypes
+		}
+		// Remove dead pool from worker pools set
+		if _, err = conn.Do("SREM", workerPoolsKey, deadPoolID); err != nil {
+			return err
+		}
+		// Cleanup any stale lock info
+		if err = r.cleanStaleLockInfo(deadPoolID, lockJobTypes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
