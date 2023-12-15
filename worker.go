@@ -202,6 +202,50 @@ func (w *worker) removeJobFromInProgress(job *Job, fate terminateOp) {
 	}
 }
 
+func (w *worker) jobFate(jt *jobType, job *Job) terminateOp {
+	if jt != nil {
+		failsRemaining := int64(jt.MaxFails) - job.Fails
+		if failsRemaining > 0 {
+			return terminateAndRetry(w, jt, job)
+		}
+		if jt.SkipDead {
+			return terminateOnly
+		}
+	}
+	return terminateAndDead(w, job)
+}
+
+func (w *worker) processJob(job *Job) {
+	var runErr error
+	if job.Unique {
+		updatedJob := w.getAndDeleteUniqueJob(job)
+		// This is to support the old way of doing it, where we used the job off the queue and just deleted the unique key
+		// Going forward the job on the queue will always be just a placeholder, and we will be replacing it with the
+		// updated job extracted here
+		if updatedJob != nil {
+			job = updatedJob
+		}
+	}
+
+	jt := w.jobTypes[job.Name]
+	if jt == nil {
+		runErr = fmt.Errorf("stray job: no handler")
+		logError("process_job.stray", runErr)
+	} else {
+		w.observeStarted(job.Name, job.ID, job.Args)
+		job.observer = w.observer // for Checkin
+		_, runErr = runJob(job, w.contextType, w.middleware, jt)
+		w.observeDone(job.Name, job.ID, runErr)
+	}
+
+	fate := terminateOnly
+	if runErr != nil {
+		job.failed(runErr)
+		fate = w.jobFate(jt, job)
+	}
+	w.removeJobFromInProgress(job, fate)
+}
+
 // Default algorithm returns a fastly increasing unboundedly fashion backoff counter.
 func defaultBackoffCalculator(job *Job) int64 {
 	fails := job.Fails
