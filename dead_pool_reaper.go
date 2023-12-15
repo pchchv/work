@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -77,4 +78,33 @@ func (r *deadPoolReaper) findDeadPools() (map[string][]string, error) {
 	}
 
 	return deadPools, nil
+}
+
+func (r *deadPoolReaper) requeueInProgressJobs(poolID string, jobTypes []string) error {
+	numKeys := len(jobTypes) * requeueKeysPerJob
+	scriptArgs := make([]interface{}, 0, numKeys+1)
+	redisRequeueScript := redis.NewScript(numKeys, redisLuaReenqueueJob)
+
+	for _, jobType := range jobTypes {
+		// pops from in progress, push into job queue and decrement the queue lock
+		scriptArgs = append(scriptArgs, redisKeyJobsInProgress(r.namespace, poolID, jobType), redisKeyJobs(r.namespace, jobType), redisKeyJobsLock(r.namespace, jobType), redisKeyJobsLockInfo(r.namespace, jobType)) // KEYS[1-4 * N]
+	}
+	scriptArgs = append(scriptArgs, poolID) // ARGV[1]
+
+	conn := r.pool.Get()
+	defer conn.Close()
+
+	// Keep moving jobs until all queues are empty
+	for {
+		values, err := redis.Values(redisRequeueScript.Do(conn, scriptArgs...))
+		if err == redis.ErrNil {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		if len(values) != 3 {
+			return fmt.Errorf("need 3 elements back")
+		}
+	}
 }
