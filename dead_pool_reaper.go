@@ -2,6 +2,7 @@ package work
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -163,4 +164,26 @@ func (r *deadPoolReaper) reap() error {
 		}
 	}
 	return nil
+}
+
+func (r *deadPoolReaper) loop() {
+	// Reap immediately after we provide some time for initialization
+	timer := time.NewTimer(r.deadTime)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-r.stopChan:
+			r.doneStoppingChan <- struct{}{}
+			return
+		case <-timer.C:
+			// Schedule next occurrence periodically with jitter
+			timer.Reset(r.reapPeriod + time.Duration(rand.Intn(reapJitterSecs))*time.Second)
+
+			// Reap
+			if err := r.reap(); err != nil {
+				logError("dead_pool_reaper.reap", err)
+			}
+		}
+	}
 }
