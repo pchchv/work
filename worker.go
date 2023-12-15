@@ -77,6 +77,24 @@ func (w *worker) updateMiddlewareAndJobTypes(middleware []*middlewareHandler, jo
 	w.redisFetchScript = redis.NewScript(len(jobTypes)*fetchKeysPerJobType, redisLuaFetchJob)
 }
 
+func (w *worker) start() {
+	go w.loop()
+	go w.observer.start()
+}
+
+func (w *worker) stop() {
+	w.stopChan <- struct{}{}
+	<-w.doneStoppingChan
+	w.observer.drain()
+	w.observer.stop()
+}
+
+func (w *worker) drain() {
+	w.drainChan <- struct{}{}
+	<-w.doneDrainingChan
+	w.observer.drain()
+}
+
 // Default algorithm returns a fastly increasing unboundedly fashion backoff counter.
 func defaultBackoffCalculator(job *Job) int64 {
 	fails := job.Fails
