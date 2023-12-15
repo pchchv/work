@@ -351,3 +351,15 @@ func redisKeyUniqueJob(namespace, jobName string, args map[string]interface{}) (
 
 	return buf.String(), nil
 }
+
+func redisKeyRetry(namespace string) string {
+	return redisNamespacePrefix(namespace) + "retry"
+}
+
+func redisKeyDead(namespace string) string {
+	return redisNamespacePrefix(namespace) + "dead"
+}
+
+func redisKeyScheduled(namespace string) string {
+	return redisNamespacePrefix(namespace) + "scheduled"
+}
