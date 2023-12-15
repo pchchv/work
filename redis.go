@@ -363,3 +363,11 @@ func redisKeyDead(namespace string) string {
 func redisKeyScheduled(namespace string) string {
 	return redisNamespacePrefix(namespace) + "scheduled"
 }
+
+func redisKeyWorkerPools(namespace string) string {
+	return redisNamespacePrefix(namespace) + "worker_pools"
+}
+
+func redisKeyHeartbeat(namespace, workerPoolID string) string {
+	return redisNamespacePrefix(namespace) + "worker_pools:" + workerPoolID
+}
