@@ -371,3 +371,7 @@ func redisKeyWorkerPools(namespace string) string {
 func redisKeyHeartbeat(namespace, workerPoolID string) string {
 	return redisNamespacePrefix(namespace) + "worker_pools:" + workerPoolID
 }
+
+func redisKeyLastPeriodicEnqueue(namespace string) string {
+	return redisNamespacePrefix(namespace) + "last_periodic_enqueue"
+}
