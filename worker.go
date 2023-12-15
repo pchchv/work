@@ -7,6 +7,10 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+const fetchKeysPerJobType = 6
+
+var sleepBackoffsInMilliseconds = []int64{0, 10, 100, 1000, 5000}
+
 type worker struct {
 	workerID         string
 	poolID           string
@@ -25,7 +29,37 @@ type worker struct {
 	doneDrainingChan chan struct{}
 }
 
-// note: can't be called while the thing is started
+func newWorker(namespace string, poolID string, pool *redis.Pool, contextType reflect.Type, middleware []*middlewareHandler, jobTypes map[string]*jobType, sleepBackoffs []int64) *worker {
+	workerID := makeIdentifier()
+	ob := newObserver(namespace, pool, workerID)
+
+	if len(sleepBackoffs) == 0 {
+		sleepBackoffs = sleepBackoffsInMilliseconds
+	}
+
+	w := &worker{
+		workerID:      workerID,
+		poolID:        poolID,
+		namespace:     namespace,
+		pool:          pool,
+		contextType:   contextType,
+		sleepBackoffs: sleepBackoffs,
+
+		observer: ob,
+
+		stopChan:         make(chan struct{}),
+		doneStoppingChan: make(chan struct{}),
+
+		drainChan:        make(chan struct{}),
+		doneDrainingChan: make(chan struct{}),
+	}
+
+	w.updateMiddlewareAndJobTypes(middleware, jobTypes)
+
+	return w
+}
+
+// note: can't be called while the thing is started.
 func (w *worker) updateMiddlewareAndJobTypes(middleware []*middlewareHandler, jobTypes map[string]*jobType) {
 	w.middleware = middleware
 	sampler := prioritySampler{}
