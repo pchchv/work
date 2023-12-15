@@ -27,3 +27,13 @@ type periodicEnqueuer struct {
 	stopChan              chan struct{}
 	doneStoppingChan      chan struct{}
 }
+
+func newPeriodicEnqueuer(namespace string, pool *redis.Pool, periodicJobs []*periodicJob) *periodicEnqueuer {
+	return &periodicEnqueuer{
+		namespace:        namespace,
+		pool:             pool,
+		periodicJobs:     periodicJobs,
+		stopChan:         make(chan struct{}),
+		doneStoppingChan: make(chan struct{}),
+	}
+}
