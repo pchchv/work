@@ -207,3 +207,18 @@ func defaultBackoffCalculator(job *Job) int64 {
 	fails := job.Fails
 	return (fails * fails * fails * fails) + 15 + (rand.Int63n(30) * (fails + 1))
 }
+
+func terminateOnly(_ redis.Conn) {
+	return
+}
+
+func terminateAndRetry(w *worker, jt *jobType, job *Job) terminateOp {
+	rawJSON, err := job.serialize()
+	if err != nil {
+		logError("worker.terminate_and_retry.serialize", err)
+		return terminateOnly
+	}
+	return func(conn redis.Conn) {
+		conn.Send("ZADD", redisKeyRetry(w.namespace), nowEpochSeconds()+jt.calcBackoff(job), rawJSON)
+	}
+}
