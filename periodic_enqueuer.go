@@ -2,6 +2,7 @@ package work
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -97,6 +98,35 @@ func (pe *periodicEnqueuer) enqueue() error {
 
 	_, err := conn.Do("SET", redisKeyLastPeriodicEnqueue(pe.namespace), now)
 	return err
+}
+
+func (pe *periodicEnqueuer) loop() {
+	// Begin reaping periodically
+	timer := time.NewTimer(periodicEnqueuerSleep + time.Duration(rand.Intn(30))*time.Second)
+	defer timer.Stop()
+
+	if pe.shouldEnqueue() {
+		err := pe.enqueue()
+		if err != nil {
+			logError("periodic_enqueuer.loop.enqueue", err)
+		}
+	}
+
+	for {
+		select {
+		case <-pe.stopChan:
+			pe.doneStoppingChan <- struct{}{}
+			return
+		case <-timer.C:
+			timer.Reset(periodicEnqueuerSleep + time.Duration(rand.Intn(30))*time.Second)
+			if pe.shouldEnqueue() {
+				err := pe.enqueue()
+				if err != nil {
+					logError("periodic_enqueuer.loop.enqueue", err)
+				}
+			}
+		}
+	}
 }
 
 func makeUniquePeriodicID(name, spec string, epoch int64) string {
