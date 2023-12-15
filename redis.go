@@ -39,3 +39,11 @@ func redisKeyJobsPaused(namespace, jobName string) string {
 func redisKeyJobsLockInfo(namespace, jobName string) string {
 	return redisKeyJobs(namespace, jobName) + ":lock_info"
 }
+
+func redisKeyJobsConcurrency(namespace, jobName string) string {
+	return redisKeyJobs(namespace, jobName) + ":max_concurrency"
+}
+
+func redisKeyKnownJobs(namespace string) string {
+	return redisNamespacePrefix(namespace) + "known_jobs"
+}
