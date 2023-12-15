@@ -222,3 +222,18 @@ func terminateAndRetry(w *worker, jt *jobType, job *Job) terminateOp {
 		conn.Send("ZADD", redisKeyRetry(w.namespace), nowEpochSeconds()+jt.calcBackoff(job), rawJSON)
 	}
 }
+
+func terminateAndDead(w *worker, job *Job) terminateOp {
+	rawJSON, err := job.serialize()
+	if err != nil {
+		logError("worker.terminate_and_dead.serialize", err)
+		return terminateOnly
+	}
+	return func(conn redis.Conn) {
+		// NOTE: sidekiq limits the # of jobs: only keep jobs for 6 months, and only keep a max # of jobs
+		// The max # of jobs seems really horrible. Seems like operations should be on top of it.
+		// conn.Send("ZREMRANGEBYSCORE", redisKeyDead(w.namespace), "-inf", now - keepInterval)
+		// conn.Send("ZREMRANGEBYRANK", redisKeyDead(w.namespace), 0, -maxJobs)
+		conn.Send("ZADD", redisKeyDead(w.namespace), nowEpochSeconds(), rawJSON)
+	}
+}
