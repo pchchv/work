@@ -12,6 +12,8 @@ const fetchKeysPerJobType = 6
 
 var sleepBackoffsInMilliseconds = []int64{0, 10, 100, 1000, 5000}
 
+type terminateOp func(conn redis.Conn)
+
 type worker struct {
 	workerID         string
 	poolID           string
