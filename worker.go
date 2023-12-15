@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"math/rand"
 	"reflect"
 
@@ -93,6 +94,53 @@ func (w *worker) drain() {
 	w.drainChan <- struct{}{}
 	<-w.doneDrainingChan
 	w.observer.drain()
+}
+
+func (w *worker) fetchJob() (*Job, error) {
+	// resort queues
+	// NOTE: could optimize this to only resort every second, or something.
+	w.sampler.sample()
+	numKeys := len(w.sampler.samples) * fetchKeysPerJobType
+	scriptArgs := make([]interface{}, 0, numKeys+1)
+
+	for _, s := range w.sampler.samples {
+		scriptArgs = append(scriptArgs, s.redisJobs, s.redisJobsInProg, s.redisJobsPaused, s.redisJobsLock, s.redisJobsLockInfo, s.redisJobsMaxConcurrency) // KEYS[1-6 * N]
+	}
+	scriptArgs = append(scriptArgs, w.poolID) // ARGV[1]
+	conn := w.pool.Get()
+	defer conn.Close()
+
+	values, err := redis.Values(w.redisFetchScript.Do(conn, scriptArgs...))
+	if err == redis.ErrNil {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	if len(values) != 3 {
+		return nil, fmt.Errorf("need 3 elements back")
+	}
+
+	rawJSON, ok := values[0].([]byte)
+	if !ok {
+		return nil, fmt.Errorf("response message not bytes")
+	}
+
+	dequeuedFrom, ok := values[1].([]byte)
+	if !ok {
+		return nil, fmt.Errorf("response queue not bytes")
+	}
+
+	inProgQueue, ok := values[2].([]byte)
+	if !ok {
+		return nil, fmt.Errorf("response in prog not bytes")
+	}
+
+	job, err := newJob(rawJSON, dequeuedFrom, inProgQueue)
+	if err != nil {
+		return nil, err
+	}
+	return job, nil
 }
 
 // Default algorithm returns a fastly increasing unboundedly fashion backoff counter.
