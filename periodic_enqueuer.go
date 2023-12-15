@@ -8,7 +8,10 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const periodicEnqueuerSleep = 2 * time.Minute
+const (
+	periodicEnqueuerSleep   = 2 * time.Minute
+	periodicEnqueuerHorizon = 4 * time.Minute
+)
 
 type periodicJob struct {
 	spec     string
@@ -54,6 +57,46 @@ func (pe *periodicEnqueuer) shouldEnqueue() bool {
 	}
 
 	return lastEnqueue < (nowEpochSeconds() - int64(periodicEnqueuerSleep/time.Minute))
+}
+
+func (pe *periodicEnqueuer) enqueue() error {
+	now := nowEpochSeconds()
+	nowTime := time.Unix(now, 0)
+	horizon := nowTime.Add(periodicEnqueuerHorizon)
+	conn := pe.pool.Get()
+	defer conn.Close()
+
+	for _, pj := range pe.periodicJobs {
+		for t := pj.schedule.Next(nowTime); t.Before(horizon); t = pj.schedule.Next(t) {
+			epoch := t.Unix()
+			id := makeUniquePeriodicID(pj.jobName, pj.spec, epoch)
+
+			job := &Job{
+				Name: pj.jobName,
+				ID:   id,
+
+				// This is technically wrong, but this lets the bytes be identical for the same periodic job instance.
+				// If we don't do this,
+				// we'd need to use a different approach -- probably giving each periodic job
+				// its own history of the past 100 periodic jobs, and only scheduling a job if it's not in the history.
+				EnqueuedAt: epoch,
+				Args:       nil,
+			}
+
+			rawJSON, err := job.serialize()
+			if err != nil {
+				return err
+			}
+
+			_, err = conn.Do("ZADD", redisKeyScheduled(pe.namespace), epoch, rawJSON)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err := conn.Do("SET", redisKeyLastPeriodicEnqueue(pe.namespace), now)
+	return err
 }
 
 func makeUniquePeriodicID(name, spec string, epoch int64) string {
