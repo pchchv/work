@@ -1,6 +1,10 @@
 package work
 
-import "fmt"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
 
 var (
 	// Used to fetch the next job to run
@@ -328,4 +332,22 @@ func redisKeyJobsConcurrency(namespace, jobName string) string {
 
 func redisKeyKnownJobs(namespace string) string {
 	return redisNamespacePrefix(namespace) + "known_jobs"
+}
+
+func redisKeyUniqueJob(namespace, jobName string, args map[string]interface{}) (string, error) {
+	var buf bytes.Buffer
+
+	buf.WriteString(redisNamespacePrefix(namespace))
+	buf.WriteString("unique:")
+	buf.WriteString(jobName)
+	buf.WriteRune(':')
+
+	if args != nil {
+		err := json.NewEncoder(&buf).Encode(args)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return buf.String(), nil
 }
