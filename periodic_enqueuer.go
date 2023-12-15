@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -53,4 +54,8 @@ func (pe *periodicEnqueuer) shouldEnqueue() bool {
 	}
 
 	return lastEnqueue < (nowEpochSeconds() - int64(periodicEnqueuerSleep/time.Minute))
+}
+
+func makeUniquePeriodicID(name, spec string, epoch int64) string {
+	return fmt.Sprintf("periodic:%s:%s:%d", name, spec, epoch)
 }
