@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/robfig/cron/v3"
 )
 
 // You may provide your own backoff function for retrying failed jobs or use the builtin one.
@@ -163,6 +164,31 @@ func (wp *WorkerPool) JobWithOptions(name string, jobOpts JobOptions, fn interfa
 	for _, w := range wp.workers {
 		w.updateMiddlewareAndJobTypes(wp.middleware, wp.jobTypes)
 	}
+	return wp
+}
+
+// Job registers the job name to the specified handler fn.
+// For instance, when workers pull jobs from the name queue they'll be processed by the specified handler function.
+// fn can take one of these forms:
+// (*ContextType).func(*Job) error,
+// (ContextType matches the type of ctx specified when creating a pool)
+// func(*Job) error, for the generic handler format.
+func (wp *WorkerPool) Job(name string, fn interface{}) *WorkerPool {
+	return wp.JobWithOptions(name, JobOptions{}, fn)
+}
+
+// PeriodicallyEnqueue will periodically enqueue jobName according to the cron-based spec.
+// The spec format is based on https://godoc.org/github.com/robfig/cron, which is a relatively standard cron format.
+// Note that the first value is the seconds!
+// If you have multiple worker pools on different machines, they'll all coordinate and only enqueue your job once.
+func (wp *WorkerPool) PeriodicallyEnqueue(spec string, jobName string) *WorkerPool {
+	p := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	schedule, err := p.Parse(spec)
+	if err != nil {
+		panic(err)
+	}
+
+	wp.periodicJobs = append(wp.periodicJobs, &periodicJob{jobName: jobName, spec: spec, schedule: schedule})
 	return wp
 }
 
