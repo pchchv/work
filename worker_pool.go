@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/robfig/cron/v3"
@@ -247,6 +248,51 @@ func (wp *WorkerPool) workerIDs() []string {
 
 	sort.Strings(wids)
 	return wids
+}
+
+// Start starts the workers and associated processes.
+func (wp *WorkerPool) Start() {
+	if wp.started {
+		return
+	}
+	wp.started = true
+
+	// TODO: we should cleanup stale keys on startup from previously registered jobs
+	wp.writeConcurrencyControlsToRedis()
+	go wp.writeKnownJobsToRedis()
+
+	for _, w := range wp.workers {
+		go w.start()
+	}
+
+	wp.heartbeater = newWorkerPoolHeartbeater(wp.namespace, wp.pool, wp.workerPoolID, wp.jobTypes, wp.concurrency, wp.workerIDs())
+	wp.heartbeater.start()
+	wp.startRequeuers()
+	wp.periodicEnqueuer = newPeriodicEnqueuer(wp.namespace, wp.pool, wp.periodicJobs)
+	wp.periodicEnqueuer.start()
+}
+
+// Stop stops the workers and associated processes.
+func (wp *WorkerPool) Stop() {
+	if !wp.started {
+		return
+	}
+	wp.started = false
+
+	wg := sync.WaitGroup{}
+	for _, w := range wp.workers {
+		wg.Add(1)
+		go func(w *worker) {
+			w.stop()
+			wg.Done()
+		}(w)
+	}
+	wg.Wait()
+	wp.heartbeater.stop()
+	wp.retrier.stop()
+	wp.scheduler.stop()
+	wp.deadPoolReaper.stop()
+	wp.periodicEnqueuer.stop()
 }
 
 // validateContextType will panic if context is invalid.
