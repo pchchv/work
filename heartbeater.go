@@ -63,3 +63,26 @@ func newWorkerPoolHeartbeater(
 	h.hostname = host
 	return h
 }
+
+func (h *workerPoolHeartbeater) heartbeat() {
+	conn := h.pool.Get()
+	defer conn.Close()
+
+	workerPoolsKey := redisKeyWorkerPools(h.namespace)
+	heartbeatKey := redisKeyHeartbeat(h.namespace, h.workerPoolID)
+
+	conn.Send("SADD", workerPoolsKey, h.workerPoolID)
+	conn.Send("HMSET", heartbeatKey,
+		"heartbeat_at", nowEpochSeconds(),
+		"started_at", h.startedAt,
+		"job_names", h.jobNames,
+		"concurrency", h.concurrency,
+		"worker_ids", h.workerIDs,
+		"host", h.hostname,
+		"pid", h.pid,
+	)
+
+	if err := conn.Flush(); err != nil {
+		logError("heartbeat", err)
+	}
+}
