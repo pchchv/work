@@ -129,6 +129,15 @@ func (pe *periodicEnqueuer) loop() {
 	}
 }
 
+func (pe *periodicEnqueuer) start() {
+	go pe.loop()
+}
+
+func (pe *periodicEnqueuer) stop() {
+	pe.stopChan <- struct{}{}
+	<-pe.doneStoppingChan
+}
+
 func makeUniquePeriodicID(name, spec string, epoch int64) string {
 	return fmt.Sprintf("periodic:%s:%s:%d", name, spec, epoch)
 }
