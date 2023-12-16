@@ -118,6 +118,28 @@ func NewWorkerPool(ctx interface{}, concurrency uint, namespace string, pool *re
 	return NewWorkerPoolWithOptions(ctx, concurrency, namespace, pool, WorkerPoolOptions{})
 }
 
+// Middleware appends the specified function to the middleware chain. The fn can take one of these forms:
+// (*ContextType).func(*Job, NextMiddlewareFunc) error, (ContextType matches the type of ctx specified when creating a pool)
+// func(*Job, NextMiddlewareFunc) error, for the generic middleware format.
+func (wp *WorkerPool) Middleware(fn interface{}) *WorkerPool {
+	vfn := reflect.ValueOf(fn)
+	validateMiddlewareType(wp.contextType, vfn)
+
+	mw := &middlewareHandler{
+		DynamicMiddleware: vfn,
+	}
+	if gmh, ok := fn.(func(*Job, NextMiddlewareFunc) error); ok {
+		mw.IsGeneric = true
+		mw.GenericMiddlewareHandler = gmh
+	}
+
+	wp.middleware = append(wp.middleware, mw)
+	for _, w := range wp.workers {
+		w.updateMiddlewareAndJobTypes(wp.middleware, wp.jobTypes)
+	}
+	return wp
+}
+
 // validateContextType will panic if context is invalid.
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
