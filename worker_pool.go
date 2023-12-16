@@ -240,3 +240,15 @@ func instructiveMessage(vfn reflect.Value, addingType string, yourType string, a
 	str += strings.Repeat("*", 120) + "\n"
 	return str
 }
+
+func validateHandlerType(ctxType reflect.Type, vfn reflect.Value) {
+	if !isValidHandlerType(ctxType, vfn) {
+		panic(instructiveMessage(vfn, "a handler", "handler", "job *work.Job", ctxType))
+	}
+}
+
+func validateMiddlewareType(ctxType reflect.Type, vfn reflect.Value) {
+	if !isValidMiddlewareType(ctxType, vfn) {
+		panic(instructiveMessage(vfn, "middleware", "middleware", "job *work.Job, next NextMiddlewareFunc", ctxType))
+	}
+}
