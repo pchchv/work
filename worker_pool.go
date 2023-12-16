@@ -83,3 +83,10 @@ type WorkerPool struct {
 	deadPoolReaper   *deadPoolReaper
 	periodicEnqueuer *periodicEnqueuer
 }
+
+// validateContextType will panic if context is invalid.
+func validateContextType(ctxType reflect.Type) {
+	if ctxType.Kind() != reflect.Struct {
+		panic("work: Context needs to be a struct type")
+	}
+}
