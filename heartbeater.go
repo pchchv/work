@@ -86,3 +86,18 @@ func (h *workerPoolHeartbeater) heartbeat() {
 		logError("heartbeat", err)
 	}
 }
+
+func (h *workerPoolHeartbeater) removeHeartbeat() {
+	conn := h.pool.Get()
+	defer conn.Close()
+
+	workerPoolsKey := redisKeyWorkerPools(h.namespace)
+	heartbeatKey := redisKeyHeartbeat(h.namespace, h.workerPoolID)
+
+	conn.Send("SREM", workerPoolsKey, h.workerPoolID)
+	conn.Send("DEL", heartbeatKey)
+
+	if err := conn.Flush(); err != nil {
+		logError("remove_heartbeat", err)
+	}
+}
