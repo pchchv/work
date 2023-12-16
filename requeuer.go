@@ -1,6 +1,8 @@
 package work
 
 import (
+	"fmt"
+
 	"github.com/gomodule/redigo/redis"
 )
 
@@ -35,4 +37,29 @@ func newRequeuer(namespace string, pool *redis.Pool, requeueKey string, jobNames
 		drainChan:          make(chan struct{}),
 		doneDrainingChan:   make(chan struct{}),
 	}
+}
+
+func (r *requeuer) process() bool {
+	conn := r.pool.Get()
+	defer conn.Close()
+
+	r.redisRequeueArgs[len(r.redisRequeueArgs)-1] = nowEpochSeconds()
+
+	res, err := redis.String(r.redisRequeueScript.Do(conn, r.redisRequeueArgs...))
+	if err == redis.ErrNil {
+		return false
+	} else if err != nil {
+		logError("requeuer.process", err)
+		return false
+	}
+
+	if res == "" {
+		return false
+	} else if res == "dead" {
+		logError("requeuer.process.dead", fmt.Errorf("no job name"))
+		return true
+	} else if res == "ok" {
+		return true
+	}
+	return false
 }
