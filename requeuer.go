@@ -86,3 +86,12 @@ func (r *requeuer) loop() {
 		}
 	}
 }
+
+func (r *requeuer) start() {
+	go r.loop()
+}
+
+func (r *requeuer) stop() {
+	r.stopChan <- struct{}{}
+	<-r.doneStoppingChan
+}
