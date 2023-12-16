@@ -192,6 +192,20 @@ func (wp *WorkerPool) PeriodicallyEnqueue(spec string, jobName string) *WorkerPo
 	return wp
 }
 
+func (wp *WorkerPool) writeConcurrencyControlsToRedis() {
+	if len(wp.jobTypes) == 0 {
+		return
+	}
+
+	conn := wp.pool.Get()
+	defer conn.Close()
+	for jobName, jobType := range wp.jobTypes {
+		if _, err := conn.Do("SET", redisKeyJobsConcurrency(wp.namespace, jobName), jobType.MaxConcurrency); err != nil {
+			logError("write_concurrency_controls_max_concurrency", err)
+		}
+	}
+}
+
 // validateContextType will panic if context is invalid.
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
