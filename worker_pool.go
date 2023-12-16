@@ -1,6 +1,10 @@
 package work
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/gomodule/redigo/redis"
+)
 
 // You may provide your own backoff function for retrying failed jobs or use the builtin one.
 // Returns the number of seconds to wait until the next attempt.
@@ -52,4 +56,30 @@ func (jt *jobType) calcBackoff(j *Job) int64 {
 		return defaultBackoffCalculator(j)
 	}
 	return jt.Backoff(j)
+}
+
+// WorkerPool represents a pool of workers.
+// It forms the primary API of gocraft/work.
+// WorkerPools provide the public API of gocraft/work.
+// You can attach jobs and middlware to them.
+// You can start and stop them.
+// Based on their concurrency setting,
+// they'll spin up N worker goroutines.
+type WorkerPool struct {
+	workerPoolID     string
+	concurrency      uint
+	namespace        string // eg, "myapp-work"
+	pool             *redis.Pool
+	sleepBackoffs    []int64
+	contextType      reflect.Type
+	jobTypes         map[string]*jobType
+	middleware       []*middlewareHandler
+	started          bool
+	periodicJobs     []*periodicJob
+	workers          []*worker
+	heartbeater      *workerPoolHeartbeater
+	retrier          *requeuer
+	scheduler        *requeuer
+	deadPoolReaper   *deadPoolReaper
+	periodicEnqueuer *periodicEnqueuer
 }
