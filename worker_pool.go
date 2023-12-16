@@ -2,6 +2,7 @@ package work
 
 import (
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/gomodule/redigo/redis"
@@ -223,6 +224,29 @@ func (wp *WorkerPool) writeKnownJobsToRedis() {
 	if _, err := conn.Do("SADD", jobNames...); err != nil {
 		logError("write_known_jobs", err)
 	}
+}
+
+func (wp *WorkerPool) startRequeuers() {
+	jobNames := make([]string, 0, len(wp.jobTypes))
+	for k := range wp.jobTypes {
+		jobNames = append(jobNames, k)
+	}
+	wp.retrier = newRequeuer(wp.namespace, wp.pool, redisKeyRetry(wp.namespace), jobNames)
+	wp.scheduler = newRequeuer(wp.namespace, wp.pool, redisKeyScheduled(wp.namespace), jobNames)
+	wp.deadPoolReaper = newDeadPoolReaper(wp.namespace, wp.pool, jobNames)
+	wp.retrier.start()
+	wp.scheduler.start()
+	wp.deadPoolReaper.start()
+}
+
+func (wp *WorkerPool) workerIDs() []string {
+	wids := make([]string, 0, len(wp.workers))
+	for _, w := range wp.workers {
+		wids = append(wids, w.workerID)
+	}
+
+	sort.Strings(wids)
+	return wids
 }
 
 // validateContextType will panic if context is invalid.
