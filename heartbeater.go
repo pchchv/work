@@ -117,3 +117,12 @@ func (h *workerPoolHeartbeater) loop() {
 		}
 	}
 }
+
+func (h *workerPoolHeartbeater) start() {
+	go h.loop()
+}
+
+func (h *workerPoolHeartbeater) stop() {
+	h.stopChan <- struct{}{}
+	<-h.doneStoppingChan
+}
