@@ -295,6 +295,20 @@ func (wp *WorkerPool) Stop() {
 	wp.periodicEnqueuer.stop()
 }
 
+// Drain drains all jobs in the queue before returning.
+// Note that if jobs are added faster than we can process them, this function wouldn't return.
+func (wp *WorkerPool) Drain() {
+	wg := sync.WaitGroup{}
+	for _, w := range wp.workers {
+		wg.Add(1)
+		go func(w *worker) {
+			w.drain()
+			wg.Done()
+		}(w)
+	}
+	wg.Wait()
+}
+
 // validateContextType will panic if context is invalid.
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
