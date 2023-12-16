@@ -123,3 +123,39 @@ func validateContextType(ctxType reflect.Type) {
 		panic("work: Context needs to be a struct type")
 	}
 }
+
+func isValidHandlerType(ctxType reflect.Type, vfn reflect.Value) bool {
+	fnType := vfn.Type()
+	if fnType.Kind() != reflect.Func {
+		return false
+	}
+
+	numIn := fnType.NumIn()
+	numOut := fnType.NumOut()
+	if numOut != 1 {
+		return false
+	}
+
+	var e *error
+	outType := fnType.Out(0)
+	if outType != reflect.TypeOf(e).Elem() {
+		return false
+	}
+
+	var j *Job
+	if numIn == 1 {
+		if fnType.In(0) != reflect.TypeOf(j) {
+			return false
+		}
+	} else if numIn == 2 {
+		if fnType.In(0) != reflect.PtrTo(ctxType) {
+			return false
+		}
+		if fnType.In(1) != reflect.TypeOf(j) {
+			return false
+		}
+	} else {
+		return false
+	}
+	return true
+}
