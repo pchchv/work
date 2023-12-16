@@ -84,6 +84,32 @@ type WorkerPool struct {
 	periodicEnqueuer *periodicEnqueuer
 }
 
+// NewWorkerPoolWithOptions creates a new worker pool as per the NewWorkerPool function, but permits you to specify
+// additional options such as sleep backoffs.
+func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace string, pool *redis.Pool, workerPoolOpts WorkerPoolOptions) *WorkerPool {
+	if pool == nil {
+		panic("NewWorkerPool needs a non-nil *redis.Pool")
+	}
+
+	ctxType := reflect.TypeOf(ctx)
+	validateContextType(ctxType)
+	wp := &WorkerPool{
+		workerPoolID:  makeIdentifier(),
+		concurrency:   concurrency,
+		namespace:     namespace,
+		pool:          pool,
+		sleepBackoffs: workerPoolOpts.SleepBackoffs,
+		contextType:   ctxType,
+		jobTypes:      make(map[string]*jobType),
+	}
+
+	for i := uint(0); i < wp.concurrency; i++ {
+		w := newWorker(wp.namespace, wp.workerPoolID, wp.pool, wp.contextType, nil, wp.jobTypes, wp.sleepBackoffs)
+		wp.workers = append(wp.workers, w)
+	}
+	return wp
+}
+
 // validateContextType will panic if context is invalid.
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
