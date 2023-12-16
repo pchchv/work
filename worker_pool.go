@@ -110,6 +110,13 @@ func NewWorkerPoolWithOptions(ctx interface{}, concurrency uint, namespace strin
 	return wp
 }
 
+// NewWorkerPool creates a new worker pool.
+// ctx should be a struct literal whose type will be used for middleware and handlers.
+// concurrency specifies how many workers to spin up - each worker can process jobs concurrently.
+func NewWorkerPool(ctx interface{}, concurrency uint, namespace string, pool *redis.Pool) *WorkerPool {
+	return NewWorkerPoolWithOptions(ctx, concurrency, namespace, pool, WorkerPoolOptions{})
+}
+
 // validateContextType will panic if context is invalid.
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
