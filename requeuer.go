@@ -2,6 +2,7 @@ package work
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -62,4 +63,26 @@ func (r *requeuer) process() bool {
 		return true
 	}
 	return false
+}
+
+func (r *requeuer) loop() {
+	// Just do this simple thing for now.
+	// If we have 100 processes all running requeuers,
+	// there's probably too much hitting redis.
+	// So later on we'l have to implement exponential backoff
+	ticker := time.Tick(1000 * time.Millisecond)
+	for {
+		select {
+		case <-r.stopChan:
+			r.doneStoppingChan <- struct{}{}
+			return
+		case <-r.drainChan:
+			for r.process() {
+			}
+			r.doneDrainingChan <- struct{}{}
+		case <-ticker:
+			for r.process() {
+			}
+		}
+	}
 }
