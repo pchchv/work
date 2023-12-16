@@ -206,6 +206,25 @@ func (wp *WorkerPool) writeConcurrencyControlsToRedis() {
 	}
 }
 
+func (wp *WorkerPool) writeKnownJobsToRedis() {
+	if len(wp.jobTypes) == 0 {
+		return
+	}
+
+	conn := wp.pool.Get()
+	defer conn.Close()
+	key := redisKeyKnownJobs(wp.namespace)
+	jobNames := make([]interface{}, 0, len(wp.jobTypes)+1)
+	jobNames = append(jobNames, key)
+	for k := range wp.jobTypes {
+		jobNames = append(jobNames, k)
+	}
+
+	if _, err := conn.Do("SADD", jobNames...); err != nil {
+		logError("write_known_jobs", err)
+	}
+}
+
 // validateContextType will panic if context is invalid.
 func validateContextType(ctxType reflect.Type) {
 	if ctxType.Kind() != reflect.Struct {
