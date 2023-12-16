@@ -101,3 +101,19 @@ func (h *workerPoolHeartbeater) removeHeartbeat() {
 		logError("remove_heartbeat", err)
 	}
 }
+
+func (h *workerPoolHeartbeater) loop() {
+	h.startedAt = nowEpochSeconds()
+	h.heartbeat() // do it right away
+	ticker := time.Tick(h.beatPeriod)
+	for {
+		select {
+		case <-h.stopChan:
+			h.removeHeartbeat()
+			h.doneStoppingChan <- struct{}{}
+			return
+		case <-ticker:
+			h.heartbeat()
+		}
+	}
+}
