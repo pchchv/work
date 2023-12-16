@@ -95,3 +95,8 @@ func (r *requeuer) stop() {
 	r.stopChan <- struct{}{}
 	<-r.doneStoppingChan
 }
+
+func (r *requeuer) drain() {
+	r.drainChan <- struct{}{}
+	<-r.doneDrainingChan
+}
