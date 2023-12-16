@@ -274,3 +274,18 @@ func validateMiddlewareType(ctxType reflect.Type, vfn reflect.Value) {
 		panic(instructiveMessage(vfn, "middleware", "middleware", "job *work.Job, next NextMiddlewareFunc", ctxType))
 	}
 }
+
+func applyDefaultsAndValidate(jobOpts JobOptions) JobOptions {
+	if jobOpts.Priority == 0 {
+		jobOpts.Priority = 1
+	}
+
+	if jobOpts.MaxFails == 0 {
+		jobOpts.MaxFails = 4
+	}
+
+	if jobOpts.Priority > 100000 {
+		panic("work: JobOptions.Priority must be between 1 and 100000")
+	}
+	return jobOpts
+}
