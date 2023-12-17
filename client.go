@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -328,6 +329,33 @@ func (c *Client) getZsetPage(key string, page uint) ([]jobScore, int64, error) {
 		return nil, 0, err
 	}
 	return jobsWithScores, count, nil
+}
+
+// deleteZsetJob deletes the job in the specified zset (dead, retry, or scheduled queue).
+// zsetKey is like "work:dead" or "work:scheduled".
+// The function deletes all jobs with the given jobID with the specified zscore
+// (there should only be one, but in theory there could be bad data).
+func (c *Client) deleteZsetJob(zsetKey string, zscore int64, jobID string) (bool, []byte, error) {
+	script := redis.NewScript(1, redisLuaDeleteSingleCmd)
+	args := make([]interface{}, 0, 1+2)
+	args = append(args, zsetKey) // KEY[1]
+	args = append(args, zscore)  // ARGV[1]
+	args = append(args, jobID)   // ARGV[2]
+
+	conn := c.pool.Get()
+	defer conn.Close()
+	values, err := redis.Values(script.Do(conn, args...))
+	if len(values) != 2 {
+		return false, nil, fmt.Errorf("need 2 elements back from redis command")
+	}
+
+	cnt, err := redis.Int64(values[0], err)
+	jobBytes, err := redis.Bytes(values[1], err)
+	if err != nil {
+		logError("client.delete_zset_job.do", err)
+		return false, nil, err
+	}
+	return cnt > 0, jobBytes, nil
 }
 
 // ScheduledJobs returns a list of ScheduledJob's.
