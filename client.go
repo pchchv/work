@@ -1,7 +1,7 @@
 package work
 
 import (
-	"fmt"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -9,14 +9,16 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+var (
 // ErrNotDeleted is returned by functions that delete jobs
 // to indicate that although the redis commands were successful,
 // no object was actually deleted by those commmands.
-var ErrNotDeleted = fmt.Errorf("nothing deleted")
-
-// ErrNotRetried is returned by functions that retry jobs to indicate that although the redis commands were successful,
+	ErrNotDeleted = errors.New("nothing deleted")
+	// ErrNotRetried is returned by functions that retry jobs
+	// to indicate that although the redis commands were successful,
 // no object was actually retried by those commmands.
-var ErrNotRetried = fmt.Errorf("nothing retried")
+	ErrNotRetried = errors.New("nothing retried")
+)
 
 // ScheduledJob represents a job in the scheduled queue.
 type ScheduledJob struct {
@@ -355,7 +357,7 @@ func (c *Client) deleteZsetJob(zsetKey string, zscore int64, jobID string) (bool
 	defer conn.Close()
 	values, err := redis.Values(script.Do(conn, args...))
 	if len(values) != 2 {
-		return false, nil, fmt.Errorf("need 2 elements back from redis command")
+		return false, nil, errors.New("need 2 elements back from redis command")
 	}
 
 	cnt, err := redis.Int64(values[0], err)
