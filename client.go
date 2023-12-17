@@ -42,3 +42,15 @@ type Queue struct {
 	Count   int64  `json:"count"`
 	Latency int64  `json:"latency"`
 }
+
+// RetryJob represents a job in the retry queue.
+type RetryJob struct {
+	RetryAt int64 `json:"retry_at"`
+	*Job
+}
+
+// DeadJob represents a job in the dead queue.
+type DeadJob struct {
+	DiedAt int64 `json:"died_at"`
+	*Job
+}
