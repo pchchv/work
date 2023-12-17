@@ -69,3 +69,11 @@ type Client struct {
 	namespace string
 	pool      *redis.Pool
 }
+
+// NewClient creates a new Client with the specified redis namespace and connection pool.
+func NewClient(namespace string, pool *redis.Pool) *Client {
+	return &Client{
+		namespace: namespace,
+		pool:      pool,
+	}
+}
