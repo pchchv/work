@@ -59,3 +59,30 @@ func (e *Enqueuer) addToKnownJobs(conn redis.Conn, jobName string) error {
 	}
 	return nil
 }
+
+// Enqueue will enqueue the specified job name and arguments.
+// The args param can be nil if no args ar needed.
+// Example: e.Enqueue("send_email", work.Q{"addr": "test@example.com"})
+func (e *Enqueuer) Enqueue(jobName string, args map[string]interface{}) (*Job, error) {
+	job := &Job{
+		Name:       jobName,
+		ID:         makeIdentifier(),
+		EnqueuedAt: nowEpochSeconds(),
+		Args:       args,
+	}
+
+	rawJSON, err := job.serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	conn := e.Pool.Get()
+	defer conn.Close()
+
+	if _, err := conn.Do("LPUSH", e.queuePrefix+jobName, rawJSON); err != nil {
+		return nil, err
+	}
+
+	err = e.addToKnownJobs(conn, jobName)
+	return job, err
+}
