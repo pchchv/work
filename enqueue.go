@@ -2,6 +2,7 @@ package work
 
 import (
 	"sync"
+	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -31,4 +32,30 @@ func NewEnqueuer(namespace string, pool *redis.Pool) *Enqueuer {
 		enqueueUniqueScript:   redis.NewScript(2, redisLuaEnqueueUnique),
 		enqueueUniqueInScript: redis.NewScript(2, redisLuaEnqueueUniqueIn),
 	}
+}
+
+func (e *Enqueuer) addToKnownJobs(conn redis.Conn, jobName string) error {
+	needSadd := true
+	now := time.Now().Unix()
+
+	e.mtx.RLock()
+	t, ok := e.knownJobs[jobName]
+	e.mtx.RUnlock()
+
+	if ok {
+		if now < t {
+			needSadd = false
+		}
+	}
+
+	if needSadd {
+		if _, err := conn.Do("SADD", redisKeyKnownJobs(e.Namespace), jobName); err != nil {
+			return err
+		}
+
+		e.mtx.Lock()
+		e.knownJobs[jobName] = now + 300
+		e.mtx.Unlock()
+	}
+	return nil
 }
