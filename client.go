@@ -329,3 +329,38 @@ func (c *Client) getZsetPage(key string, page uint) ([]jobScore, int64, error) {
 	}
 	return jobsWithScores, count, nil
 }
+
+// ScheduledJobs returns a list of ScheduledJob's.
+// The page param is 1-based; each page is 20 items.
+// The total number of items (not pages) in the list of scheduled jobs is also returned.
+func (c *Client) ScheduledJobs(page uint) ([]*ScheduledJob, int64, error) {
+	key := redisKeyScheduled(c.namespace)
+	jobsWithScores, count, err := c.getZsetPage(key, page)
+	if err != nil {
+		logError("client.scheduled_jobs.get_zset_page", err)
+		return nil, 0, err
+	}
+
+	jobs := make([]*ScheduledJob, 0, len(jobsWithScores))
+	for _, jws := range jobsWithScores {
+		jobs = append(jobs, &ScheduledJob{RunAt: jws.Score, Job: jws.job})
+	}
+	return jobs, count, nil
+}
+
+// RetryJobs returns a list of RetryJob's. The page param is 1-based; each page is 20 items.
+// The total number of items (not pages) in the list of retry jobs is also returned.
+func (c *Client) RetryJobs(page uint) ([]*RetryJob, int64, error) {
+	key := redisKeyRetry(c.namespace)
+	jobsWithScores, count, err := c.getZsetPage(key, page)
+	if err != nil {
+		logError("client.retry_jobs.get_zset_page", err)
+		return nil, 0, err
+	}
+
+	jobs := make([]*RetryJob, 0, len(jobsWithScores))
+	for _, jws := range jobsWithScores {
+		jobs = append(jobs, &RetryJob{RetryAt: jws.Score, Job: jws.job})
+	}
+	return jobs, count, nil
+}
