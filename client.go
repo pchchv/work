@@ -224,3 +224,71 @@ func (c *Client) WorkerObservations() ([]*WorkerObservation, error) {
 	}
 	return observations, nil
 }
+
+// Queues returns the Queue's it finds.
+func (c *Client) Queues() ([]*Queue, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+
+	key := redisKeyKnownJobs(c.namespace)
+	jobNames, err := redis.Strings(conn.Do("SMEMBERS", key))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(jobNames)
+
+	for _, jobName := range jobNames {
+		conn.Send("LLEN", redisKeyJobs(c.namespace, jobName))
+	}
+
+	if err := conn.Flush(); err != nil {
+		logError("client.queues.flush", err)
+		return nil, err
+	}
+
+	queues := make([]*Queue, 0, len(jobNames))
+
+	for _, jobName := range jobNames {
+		count, err := redis.Int64(conn.Receive())
+		if err != nil {
+			logError("client.queues.receive", err)
+			return nil, err
+		}
+
+		queue := &Queue{
+			JobName: jobName,
+			Count:   count,
+		}
+		queues = append(queues, queue)
+	}
+
+	for _, s := range queues {
+		if s.Count > 0 {
+			conn.Send("LINDEX", redisKeyJobs(c.namespace, s.JobName), -1)
+		}
+	}
+
+	if err := conn.Flush(); err != nil {
+		logError("client.queues.flush2", err)
+		return nil, err
+	}
+
+	now := nowEpochSeconds()
+
+	for _, s := range queues {
+		if s.Count > 0 {
+			b, err := redis.Bytes(conn.Receive())
+			if err != nil {
+				logError("client.queues.receive2", err)
+				return nil, err
+			}
+
+			job, err := newJob(b, nil, nil)
+			if err != nil {
+				logError("client.queues.new_job", err)
+			}
+			s.Latency = now - job.EnqueuedAt
+		}
+	}
+	return queues, nil
+}
