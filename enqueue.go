@@ -86,3 +86,34 @@ func (e *Enqueuer) Enqueue(jobName string, args map[string]interface{}) (*Job, e
 	err = e.addToKnownJobs(conn, jobName)
 	return job, err
 }
+
+// EnqueueIn enqueues a job in the scheduled job queue for execution in secondsFromNow seconds.
+func (e *Enqueuer) EnqueueIn(jobName string, secondsFromNow int64, args map[string]interface{}) (*ScheduledJob, error) {
+	job := &Job{
+		Name:       jobName,
+		ID:         makeIdentifier(),
+		EnqueuedAt: nowEpochSeconds(),
+		Args:       args,
+	}
+
+	rawJSON, err := job.serialize()
+	if err != nil {
+		return nil, err
+	}
+
+	conn := e.Pool.Get()
+	defer conn.Close()
+
+	scheduledJob := &ScheduledJob{
+		RunAt: nowEpochSeconds() + secondsFromNow,
+		Job:   job,
+	}
+
+	_, err = conn.Do("ZADD", redisKeyScheduled(e.Namespace), scheduledJob.RunAt, rawJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	err = e.addToKnownJobs(conn, jobName)
+	return scheduledJob, err
+}
