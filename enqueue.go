@@ -200,7 +200,6 @@ func (e *Enqueuer) EnqueueUniqueByKey(jobName string, args map[string]interface{
 	if res != "ok" || err != nil {
 		return nil, err
 	}
-
 	return job, nil
 }
 
@@ -214,4 +213,30 @@ func (e *Enqueuer) EnqueueUniqueByKey(jobName string, args map[string]interface{
 // EnqueueUnique returns the job if it was enqueued and nil if it wasn't
 func (e *Enqueuer) EnqueueUnique(jobName string, args map[string]interface{}) (*Job, error) {
 	return e.EnqueueUniqueByKey(jobName, args, nil)
+}
+
+// EnqueueUniqueInByKey enqueues a job in the scheduled job queue
+// that is unique on specified key for execution in secondsFromNow seconds.
+// See EnqueueUnique for the semantics of unique jobs.
+// Subsequent calls with same key will update arguments
+func (e *Enqueuer) EnqueueUniqueInByKey(
+	jobName string,
+	secondsFromNow int64,
+	args map[string]interface{},
+	keyMap map[string]interface{}) (*ScheduledJob, error) {
+	enqueue, job, err := e.uniqueJobHelper(jobName, args, keyMap)
+	if err != nil {
+		return nil, err
+	}
+
+	scheduledJob := &ScheduledJob{
+		RunAt: nowEpochSeconds() + secondsFromNow,
+		Job:   job,
+	}
+
+	res, err := enqueue(&scheduledJob.RunAt)
+	if res != "ok" || err != nil {
+		return nil, err
+	}
+	return scheduledJob, nil
 }
