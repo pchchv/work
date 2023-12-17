@@ -7,6 +7,8 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+type enqueueFnType func(*int64) (string, error)
+
 // Enqueuer can enqueue jobs.
 type Enqueuer struct {
 	Namespace             string // eg, "myapp-work"
