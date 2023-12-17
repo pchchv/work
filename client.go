@@ -1,5 +1,7 @@
 package work
 
+import "github.com/gomodule/redigo/redis"
+
 // ScheduledJob represents a job in the scheduled queue.
 type ScheduledJob struct {
 	RunAt int64 `json:"run_at"`
@@ -59,4 +61,11 @@ type jobScore struct {
 	JobBytes []byte
 	Score    int64
 	job      *Job
+}
+
+// Client implements all of the functionality of the web UI.
+// It can be used to inspect the status of a running cluster and retry dead jobs.
+type Client struct {
+	namespace string
+	pool      *redis.Pool
 }
