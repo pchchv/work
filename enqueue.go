@@ -240,3 +240,9 @@ func (e *Enqueuer) EnqueueUniqueInByKey(
 	}
 	return scheduledJob, nil
 }
+
+// EnqueueUniqueIn enqueues a unique job in the scheduled job queue for execution in secondsFromNow seconds.
+// See EnqueueUnique for the semantics of unique jobs.
+func (e *Enqueuer) EnqueueUniqueIn(jobName string, secondsFromNow int64, args map[string]interface{}) (*ScheduledJob, error) {
+	return e.EnqueueUniqueInByKey(jobName, secondsFromNow, args, nil)
+}
