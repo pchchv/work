@@ -54,3 +54,9 @@ type DeadJob struct {
 	DiedAt int64 `json:"died_at"`
 	*Job
 }
+
+type jobScore struct {
+	JobBytes []byte
+	Score    int64
+	job      *Job
+}
