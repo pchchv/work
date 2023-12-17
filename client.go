@@ -9,6 +9,11 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+// ErrNotDeleted is returned by functions that delete jobs
+// to indicate that although the redis commands were successful,
+// no object was actually deleted by those commmands.
+var ErrNotDeleted = fmt.Errorf("nothing deleted")
+
 // ScheduledJob represents a job in the scheduled queue.
 type ScheduledJob struct {
 	RunAt int64 `json:"run_at"`
@@ -391,4 +396,31 @@ func (c *Client) RetryJobs(page uint) ([]*RetryJob, int64, error) {
 		jobs = append(jobs, &RetryJob{RetryAt: jws.Score, Job: jws.job})
 	}
 	return jobs, count, nil
+}
+
+// DeadJobs returns a list of DeadJob's.
+// The page param is 1-based; each page is 20 items.
+// The total number of items (not pages) in the list of dead jobs is also returned.
+func (c *Client) DeadJobs(page uint) ([]*DeadJob, int64, error) {
+	key := redisKeyDead(c.namespace)
+	jobsWithScores, count, err := c.getZsetPage(key, page)
+	if err != nil {
+		logError("client.dead_jobs.get_zset_page", err)
+		return nil, 0, err
+	}
+
+	jobs := make([]*DeadJob, 0, len(jobsWithScores))
+	for _, jws := range jobsWithScores {
+		jobs = append(jobs, &DeadJob{DiedAt: jws.Score, Job: jws.job})
+	}
+	return jobs, count, nil
+}
+
+// DeleteDeadJob deletes a dead job from Redis.
+func (c *Client) DeleteDeadJob(diedAt int64, jobID string) error {
+	ok, _, err := c.deleteZsetJob(redisKeyDead(c.namespace), diedAt, jobID)
+	if err == nil && !ok {
+		err = ErrNotDeleted
+	}
+	return err
 }
