@@ -292,3 +292,40 @@ func (c *Client) Queues() ([]*Queue, error) {
 	}
 	return queues, nil
 }
+
+func (c *Client) getZsetPage(key string, page uint) ([]jobScore, int64, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+
+	if page == 0 {
+		page = 1
+	}
+
+	values, err := redis.Values(conn.Do("ZRANGEBYSCORE", key, "-inf", "+inf", "WITHSCORES", "LIMIT", (page-1)*20, 20))
+	if err != nil {
+		logError("client.get_zset_page.values", err)
+		return nil, 0, err
+	}
+
+	var jobsWithScores []jobScore
+	if err := redis.ScanSlice(values, &jobsWithScores); err != nil {
+		logError("client.get_zset_page.scan_slice", err)
+		return nil, 0, err
+	}
+
+	for i, jws := range jobsWithScores {
+		job, err := newJob(jws.JobBytes, nil, nil)
+		if err != nil {
+			logError("client.get_zset_page.new_job", err)
+			return nil, 0, err
+		}
+		jobsWithScores[i].job = job
+	}
+
+	count, err := redis.Int64(conn.Do("ZCARD", key))
+	if err != nil {
+		logError("client.get_zset_page.int64", err)
+		return nil, 0, err
+	}
+	return jobsWithScores, count, nil
+}
