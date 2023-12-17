@@ -1,6 +1,12 @@
 package work
 
-import "github.com/gomodule/redigo/redis"
+import (
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/gomodule/redigo/redis"
+)
 
 // ScheduledJob represents a job in the scheduled queue.
 type ScheduledJob struct {
@@ -76,4 +82,76 @@ func NewClient(namespace string, pool *redis.Pool) *Client {
 		namespace: namespace,
 		pool:      pool,
 	}
+}
+
+// WorkerPoolHeartbeats queries Redis and returns all WorkerPoolHeartbeat's it finds
+// (even for those worker pools which don't have a current heartbeat).
+func (c *Client) WorkerPoolHeartbeats() ([]*WorkerPoolHeartbeat, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+
+	workerPoolsKey := redisKeyWorkerPools(c.namespace)
+	workerPoolIDs, err := redis.Strings(conn.Do("SMEMBERS", workerPoolsKey))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(workerPoolIDs)
+
+	for _, wpid := range workerPoolIDs {
+		key := redisKeyHeartbeat(c.namespace, wpid)
+		conn.Send("HGETALL", key)
+	}
+
+	if err := conn.Flush(); err != nil {
+		logError("worker_pool_statuses.flush", err)
+		return nil, err
+	}
+
+	heartbeats := make([]*WorkerPoolHeartbeat, 0, len(workerPoolIDs))
+	for _, wpid := range workerPoolIDs {
+		vals, err := redis.Strings(conn.Receive())
+		if err != nil {
+			logError("worker_pool_statuses.receive", err)
+			return nil, err
+		}
+
+		heartbeat := &WorkerPoolHeartbeat{
+			WorkerPoolID: wpid,
+		}
+
+		for i := 0; i < len(vals)-1; i += 2 {
+			var err error
+			key := vals[i]
+			value := vals[i+1]
+
+			switch key {
+			case "heartbeat_at":
+				heartbeat.HeartbeatAt, err = strconv.ParseInt(value, 10, 64)
+			case "started_at":
+				heartbeat.StartedAt, err = strconv.ParseInt(value, 10, 64)
+			case "job_names":
+				heartbeat.JobNames = strings.Split(value, ",")
+				sort.Strings(heartbeat.JobNames)
+			case "concurrency":
+				var vv uint64
+				vv, err = strconv.ParseUint(value, 10, 0)
+				heartbeat.Concurrency = uint(vv)
+			case "host":
+				heartbeat.Host = value
+			case "pid":
+				var vv int64
+				vv, err = strconv.ParseInt(value, 10, 0)
+				heartbeat.Pid = int(vv)
+			case "worker_ids":
+				heartbeat.WorkerIDs = strings.Split(value, ",")
+				sort.Strings(heartbeat.WorkerIDs)
+			}
+			if err != nil {
+				logError("worker_pool_statuses.parse", err)
+				return nil, err
+			}
+		}
+		heartbeats = append(heartbeats, heartbeat)
+	}
+	return heartbeats, nil
 }
