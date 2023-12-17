@@ -155,3 +155,72 @@ func (c *Client) WorkerPoolHeartbeats() ([]*WorkerPoolHeartbeat, error) {
 	}
 	return heartbeats, nil
 }
+
+// WorkerObservations returns all of the WorkerObservation's it finds for all worker pools' workers.
+func (c *Client) WorkerObservations() ([]*WorkerObservation, error) {
+	conn := c.pool.Get()
+	defer conn.Close()
+
+	hbs, err := c.WorkerPoolHeartbeats()
+	if err != nil {
+		logError("worker_observations.worker_pool_heartbeats", err)
+		return nil, err
+	}
+
+	var workerIDs []string
+	for _, hb := range hbs {
+		workerIDs = append(workerIDs, hb.WorkerIDs...)
+	}
+
+	for _, wid := range workerIDs {
+		key := redisKeyWorkerObservation(c.namespace, wid)
+		conn.Send("HGETALL", key)
+	}
+
+	if err := conn.Flush(); err != nil {
+		logError("worker_observations.flush", err)
+		return nil, err
+	}
+
+	observations := make([]*WorkerObservation, 0, len(workerIDs))
+
+	for _, wid := range workerIDs {
+		vals, err := redis.Strings(conn.Receive())
+		if err != nil {
+			logError("worker_observations.receive", err)
+			return nil, err
+		}
+
+		ob := &WorkerObservation{
+			WorkerID: wid,
+		}
+
+		for i := 0; i < len(vals)-1; i += 2 {
+			var err error
+			key := vals[i]
+			ob.IsBusy = true
+			value := vals[i+1]
+
+			switch key {
+			case "job_name":
+				ob.JobName = value
+			case "job_id":
+				ob.JobID = value
+			case "started_at":
+				ob.StartedAt, err = strconv.ParseInt(value, 10, 64)
+			case "args":
+				ob.ArgsJSON = value
+			case "checkin":
+				ob.Checkin = value
+			case "checkin_at":
+				ob.CheckinAt, err = strconv.ParseInt(value, 10, 64)
+			}
+			if err != nil {
+				logError("worker_observations.parse", err)
+				return nil, err
+			}
+		}
+		observations = append(observations, ob)
+	}
+	return observations, nil
+}
