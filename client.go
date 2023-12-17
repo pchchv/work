@@ -473,3 +473,50 @@ func (c *Client) RetryDeadJob(diedAt int64, jobID string) error {
 	}
 	return nil
 }
+
+// RetryAllDeadJobs requeues all dead jobs.
+// In other words, it puts them all back on
+// the normal work queue for workers to pull from and process.
+func (c *Client) RetryAllDeadJobs() error {
+	// get queues for job names
+	queues, err := c.Queues()
+	if err != nil {
+		logError("client.retry_all_dead_jobs.queues", err)
+		return err
+	}
+
+	// extract job names
+	var jobNames []string
+	for _, q := range queues {
+		jobNames = append(jobNames, q.JobName)
+	}
+
+	script := redis.NewScript(len(jobNames)+1, redisLuaRequeueAllDeadCmd)
+
+	args := make([]interface{}, 0, len(jobNames)+1+3)
+	args = append(args, redisKeyDead(c.namespace)) // KEY[1]
+	for _, jobName := range jobNames {
+		args = append(args, redisKeyJobs(c.namespace, jobName)) // KEY[2, 3, ...]
+	}
+	args = append(args, redisKeyJobsPrefix(c.namespace)) // ARGV[1]
+	args = append(args, nowEpochSeconds())
+	args = append(args, 1000)
+
+	conn := c.pool.Get()
+	defer conn.Close()
+
+	// Cap iterations for safety (which could reprocess 1k*1k jobs).
+	// This is conceptually an infinite loop but let's be careful.
+	for i := 0; i < 1000; i++ {
+		res, err := redis.Int64(script.Do(conn, args...))
+		if err != nil {
+			logError("client.retry_all_dead_jobs.do", err)
+			return err
+		}
+
+		if res == 0 {
+			break
+		}
+	}
+	return nil
+}
