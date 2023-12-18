@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type emptyCtx struct{}
+
 func TestWorkerBasics(t *testing.T) {
 	var arg1 float64
 	var arg2 float64
