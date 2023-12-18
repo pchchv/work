@@ -434,3 +434,23 @@ func jobOnZset(pool *redis.Pool, key string) (int64, *Job) {
 	}
 	return scoreInt, job
 }
+
+func pauseJobs(namespace, jobName string, pool *redis.Pool) error {
+	conn := pool.Get()
+	defer conn.Close()
+
+	if _, err := conn.Do("SET", redisKeyJobsPaused(namespace, jobName), "1"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func unpauseJobs(namespace, jobName string, pool *redis.Pool) error {
+	conn := pool.Get()
+	defer conn.Close()
+
+	if _, err := conn.Do("DEL", redisKeyJobsPaused(namespace, jobName)); err != nil {
+		return err
+	}
+	return nil
+}
