@@ -559,3 +559,15 @@ func (c *Client) DeleteScheduledJob(scheduledFor int64, jobID string) error {
 	}
 	return nil
 }
+
+// DeleteAllDeadJobs deletes all dead jobs.
+func (c *Client) DeleteAllDeadJobs() error {
+	conn := c.pool.Get()
+	defer conn.Close()
+	_, err := conn.Do("DEL", redisKeyDead(c.namespace))
+	if err != nil {
+		logError("client.delete_all_dead_jobs", err)
+		return err
+	}
+	return nil
+}
