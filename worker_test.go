@@ -1,6 +1,7 @@
 package work
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -136,6 +137,52 @@ func TestWorkerInProgress(t *testing.T) {
 	// nothing in the worker status
 	h = readHash(pool, redisKeyWorkerObservation(ns, w.workerID))
 	assert.EqualValues(t, 0, len(h))
+}
+
+func TestWorkerRetry(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	job1 := "job1"
+	deleteQueue(pool, ns, job1)
+	deleteRetryAndDead(pool, ns)
+	deletePausedAndLockedKeys(ns, job1, pool)
+
+	jobTypes := make(map[string]*jobType)
+	jobTypes[job1] = &jobType{
+		Name:       job1,
+		JobOptions: JobOptions{Priority: 1, MaxFails: 3},
+		IsGeneric:  true,
+		GenericHandler: func(job *Job) error {
+			return errors.New("sorry kid")
+		},
+	}
+
+	enqueuer := NewEnqueuer(ns, pool)
+	_, err := enqueuer.Enqueue(job1, Q{"a": 1})
+	assert.Nil(t, err)
+	w := newWorker(ns, "1", pool, tstCtxType, nil, jobTypes, nil)
+	w.start()
+	w.drain()
+	w.stop()
+
+	// Ensure the right stuff is in our queues:
+	assert.EqualValues(t, 1, zsetSize(pool, redisKeyRetry(ns)))
+	assert.EqualValues(t, 0, zsetSize(pool, redisKeyDead(ns)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+	assert.EqualValues(t, 0, getInt64(pool, redisKeyJobsLock(ns, job1)))
+	assert.EqualValues(t, 0, hgetInt64(pool, redisKeyJobsLockInfo(ns, job1), w.poolID))
+
+	// Get the job on the retry queue
+	ts, job := jobOnZset(pool, redisKeyRetry(ns))
+
+	assert.True(t, ts > nowEpochSeconds())      // enqueued in the future
+	assert.True(t, ts < (nowEpochSeconds()+80)) // but less than a minute from now (first failure)
+
+	assert.Equal(t, job1, job.Name) // basics are preserved
+	assert.EqualValues(t, 1, job.Fails)
+	assert.Equal(t, "sorry kid", job.LastErr)
+	assert.True(t, (nowEpochSeconds()-job.FailedAt) <= 2)
 }
 
 func newTestPool(addr string) *redis.Pool {
