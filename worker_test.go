@@ -601,3 +601,19 @@ func unpauseJobs(namespace, jobName string, pool *redis.Pool) error {
 	}
 	return nil
 }
+
+func jobOnQueue(pool *redis.Pool, key string) *Job {
+	conn := pool.Get()
+	defer conn.Close()
+
+	rawJSON, err := redis.Bytes(conn.Do("RPOP", key))
+	if err != nil {
+		panic("could RPOP from job queue: " + err.Error())
+	}
+
+	job, err := newJob(rawJSON, nil, nil)
+	if err != nil {
+		panic("couldn't get job: " + err.Error())
+	}
+	return job
+}
