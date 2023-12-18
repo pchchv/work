@@ -147,3 +147,13 @@ func deleteQueue(pool *redis.Pool, namespace, jobName string) {
 		panic("could not delete queue: " + err.Error())
 	}
 }
+
+func deleteRetryAndDead(pool *redis.Pool, namespace string) {
+	conn := pool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("DEL", redisKeyRetry(namespace), redisKeyDead(namespace))
+	if err != nil {
+		panic("could not delete retry/dead queue: " + err.Error())
+	}
+}
