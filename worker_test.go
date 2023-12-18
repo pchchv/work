@@ -299,6 +299,68 @@ func TestWorkerDead(t *testing.T) {
 	assert.True(t, (nowEpochSeconds()-job.FailedAt) <= 2)
 }
 
+func TestWorkersPaused(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	job1 := "job1"
+	deleteQueue(pool, ns, job1)
+	deleteRetryAndDead(pool, ns)
+	deletePausedAndLockedKeys(ns, job1, pool)
+
+	jobTypes := make(map[string]*jobType)
+	jobTypes[job1] = &jobType{
+		Name:       job1,
+		JobOptions: JobOptions{Priority: 1},
+		IsGeneric:  true,
+		GenericHandler: func(job *Job) error {
+			time.Sleep(30 * time.Millisecond)
+			return nil
+		},
+	}
+
+	enqueuer := NewEnqueuer(ns, pool)
+	_, err := enqueuer.Enqueue(job1, Q{"a": 1})
+	assert.Nil(t, err)
+
+	w := newWorker(ns, "1", pool, tstCtxType, nil, jobTypes, nil)
+	// pause the jobs prior to starting
+	err = pauseJobs(ns, job1, pool)
+	assert.Nil(t, err)
+	// reset the backoff times to help with testing
+	sleepBackoffsInMilliseconds = []int64{10, 10, 10, 10, 10}
+	w.start()
+
+	// make sure the jobs stay in the still in the run queue and not moved to in progress
+	for i := 0; i < 2; i++ {
+		time.Sleep(10 * time.Millisecond)
+		assert.EqualValues(t, 1, listSize(pool, redisKeyJobs(ns, job1)))
+		assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+	}
+
+	// now unpause the jobs and check that they start
+	err = unpauseJobs(ns, job1, pool)
+	assert.Nil(t, err)
+	// sleep through 2 backoffs to make sure we allow enough time to start running
+	time.Sleep(20 * time.Millisecond)
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 1, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+
+	w.observer.drain()
+	h := readHash(pool, redisKeyWorkerObservation(ns, w.workerID))
+	assert.Equal(t, job1, h["job_name"])
+	assert.Equal(t, `{"a":1}`, h["args"])
+	w.drain()
+	w.stop()
+
+	// at this point, it should all be empty.
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+
+	// nothing in the worker status
+	h = readHash(pool, redisKeyWorkerObservation(ns, w.workerID))
+	assert.EqualValues(t, 0, len(h))
+}
+
 func newTestPool(addr string) *redis.Pool {
 	return &redis.Pool{
 		MaxActive:   10,
