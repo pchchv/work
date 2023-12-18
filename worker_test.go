@@ -37,3 +37,25 @@ func cleanKeyspace(namespace string, pool *redis.Pool) {
 		}
 	}
 }
+
+func zsetSize(pool *redis.Pool, key string) int64 {
+	conn := pool.Get()
+	defer conn.Close()
+
+	v, err := redis.Int64(conn.Do("ZCARD", key))
+	if err != nil {
+		panic("could not get ZSET size: " + err.Error())
+	}
+	return v
+}
+
+func listSize(pool *redis.Pool, key string) int64 {
+	conn := pool.Get()
+	defer conn.Close()
+
+	v, err := redis.Int64(conn.Do("LLEN", key))
+	if err != nil {
+		panic("could not get list length: " + err.Error())
+	}
+	return v
+}
