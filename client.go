@@ -10,13 +10,13 @@ import (
 )
 
 var (
-// ErrNotDeleted is returned by functions that delete jobs
-// to indicate that although the redis commands were successful,
-// no object was actually deleted by those commmands.
+	// ErrNotDeleted is returned by functions that delete jobs
+	// to indicate that although the redis commands were successful,
+	// no object was actually deleted by those commmands.
 	ErrNotDeleted = errors.New("nothing deleted")
 	// ErrNotRetried is returned by functions that retry jobs
 	// to indicate that although the redis commands were successful,
-// no object was actually retried by those commmands.
+	// no object was actually retried by those commmands.
 	ErrNotRetried = errors.New("nothing retried")
 )
 
@@ -570,4 +570,13 @@ func (c *Client) DeleteAllDeadJobs() error {
 		return err
 	}
 	return nil
+}
+
+// DeleteRetryJob deletes a job in the retry queue.
+func (c *Client) DeleteRetryJob(retryAt int64, jobID string) error {
+	ok, _, err := c.deleteZsetJob(redisKeyRetry(c.namespace), retryAt, jobID)
+	if err == nil && !ok {
+		return ErrNotDeleted
+	}
+	return err
 }
