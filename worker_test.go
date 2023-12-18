@@ -84,6 +84,59 @@ func TestWorkerBasics(t *testing.T) {
 	assert.EqualValues(t, 0, len(h))
 }
 
+func TestWorkerInProgress(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	job1 := "job1"
+	deleteQueue(pool, ns, job1)
+	deleteRetryAndDead(pool, ns)
+	deletePausedAndLockedKeys(ns, job1, pool)
+
+	jobTypes := make(map[string]*jobType)
+	jobTypes[job1] = &jobType{
+		Name:       job1,
+		JobOptions: JobOptions{Priority: 1},
+		IsGeneric:  true,
+		GenericHandler: func(job *Job) error {
+			time.Sleep(30 * time.Millisecond)
+			return nil
+		},
+	}
+
+	enqueuer := NewEnqueuer(ns, pool)
+	_, err := enqueuer.Enqueue(job1, Q{"a": 1})
+	assert.Nil(t, err)
+
+	w := newWorker(ns, "1", pool, tstCtxType, nil, jobTypes, nil)
+	w.start()
+
+	// instead of w.forceIter(), we'll wait for 10 milliseconds to let the job start
+	// The job will then sleep for 30ms. In that time, we should be able to see something in the in-progress queue.
+	time.Sleep(10 * time.Millisecond)
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 1, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+	assert.EqualValues(t, 1, getInt64(pool, redisKeyJobsLock(ns, job1)))
+	assert.EqualValues(t, 1, hgetInt64(pool, redisKeyJobsLockInfo(ns, job1), w.poolID))
+
+	// nothing in the worker status
+	w.observer.drain()
+	h := readHash(pool, redisKeyWorkerObservation(ns, w.workerID))
+	assert.Equal(t, job1, h["job_name"])
+	assert.Equal(t, `{"a":1}`, h["args"])
+	// NOTE: we could check for job_id and started_at, but it's a PITA and it's tested in observer_test.
+
+	w.drain()
+	w.stop()
+
+	// at this point, it should all be empty.
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+
+	// nothing in the worker status
+	h = readHash(pool, redisKeyWorkerObservation(ns, w.workerID))
+	assert.EqualValues(t, 0, len(h))
+}
+
 func newTestPool(addr string) *redis.Pool {
 	return &redis.Pool{
 		MaxActive:   10,
