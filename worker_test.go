@@ -157,3 +157,19 @@ func deleteRetryAndDead(pool *redis.Pool, namespace string) {
 		panic("could not delete retry/dead queue: " + err.Error())
 	}
 }
+
+func deletePausedAndLockedKeys(namespace, jobName string, pool *redis.Pool) error {
+	conn := pool.Get()
+	defer conn.Close()
+
+	if _, err := conn.Do("DEL", redisKeyJobsPaused(namespace, jobName)); err != nil {
+		return err
+	}
+	if _, err := conn.Do("DEL", redisKeyJobsLock(namespace, jobName)); err != nil {
+		return err
+	}
+	if _, err := conn.Do("DEL", redisKeyJobsLockInfo(namespace, jobName)); err != nil {
+		return err
+	}
+	return nil
+}
