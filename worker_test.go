@@ -236,6 +236,69 @@ func TestWorkerRetryWithCustomBackoff(t *testing.T) {
 	assert.Equal(t, 1, calledCustom)
 }
 
+func TestWorkerDead(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	job1 := "job1"
+	job2 := "job2"
+	deleteQueue(pool, ns, job1)
+	deleteQueue(pool, ns, job2)
+	deleteRetryAndDead(pool, ns)
+	deletePausedAndLockedKeys(ns, job1, pool)
+
+	jobTypes := make(map[string]*jobType)
+	jobTypes[job1] = &jobType{
+		Name:       job1,
+		JobOptions: JobOptions{Priority: 1, MaxFails: 0},
+		IsGeneric:  true,
+		GenericHandler: func(job *Job) error {
+			return errors.New("sorry kid1")
+		},
+	}
+	jobTypes[job2] = &jobType{
+		Name:       job2,
+		JobOptions: JobOptions{Priority: 1, MaxFails: 0, SkipDead: true},
+		IsGeneric:  true,
+		GenericHandler: func(job *Job) error {
+			return errors.New("sorry kid2")
+		},
+	}
+
+	enqueuer := NewEnqueuer(ns, pool)
+	_, err := enqueuer.Enqueue(job1, nil)
+	assert.Nil(t, err)
+	_, err = enqueuer.Enqueue(job2, nil)
+	assert.Nil(t, err)
+	w := newWorker(ns, "1", pool, tstCtxType, nil, jobTypes, nil)
+	w.start()
+	w.drain()
+	w.stop()
+
+	// ensure the right stuff is in our queues:
+	assert.EqualValues(t, 0, zsetSize(pool, redisKeyRetry(ns)))
+	assert.EqualValues(t, 1, zsetSize(pool, redisKeyDead(ns)))
+
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, "1", job1)))
+	assert.EqualValues(t, 0, getInt64(pool, redisKeyJobsLock(ns, job1)))
+	assert.EqualValues(t, 0, hgetInt64(pool, redisKeyJobsLockInfo(ns, job1), w.poolID))
+
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job2)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, "1", job2)))
+	assert.EqualValues(t, 0, getInt64(pool, redisKeyJobsLock(ns, job2)))
+	assert.EqualValues(t, 0, hgetInt64(pool, redisKeyJobsLockInfo(ns, job2), w.poolID))
+
+	// get the job on the dead queue
+	ts, job := jobOnZset(pool, redisKeyDead(ns))
+
+	assert.True(t, ts <= nowEpochSeconds())
+
+	assert.Equal(t, job1, job.Name) // basics are preserved
+	assert.EqualValues(t, 1, job.Fails)
+	assert.Equal(t, "sorry kid1", job.LastErr)
+	assert.True(t, (nowEpochSeconds()-job.FailedAt) <= 2)
+}
+
 func newTestPool(addr string) *redis.Pool {
 	return &redis.Pool{
 		MaxActive:   10,
