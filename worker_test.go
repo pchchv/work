@@ -137,3 +137,13 @@ func listSize(pool *redis.Pool, key string) int64 {
 	}
 	return v
 }
+
+func deleteQueue(pool *redis.Pool, namespace, jobName string) {
+	conn := pool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("DEL", redisKeyJobs(namespace, jobName), redisKeyJobsInProgress(namespace, "1", jobName))
+	if err != nil {
+		panic("could not delete queue: " + err.Error())
+	}
+}
