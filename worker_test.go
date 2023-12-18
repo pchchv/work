@@ -21,3 +21,19 @@ func newTestPool(addr string) *redis.Pool {
 		Wait: true,
 	}
 }
+
+func cleanKeyspace(namespace string, pool *redis.Pool) {
+	conn := pool.Get()
+	defer conn.Close()
+
+	keys, err := redis.Strings(conn.Do("KEYS", namespace+"*"))
+	if err != nil {
+		panic("could not get keys: " + err.Error())
+	}
+
+	for _, k := range keys {
+		if _, err := conn.Do("DEL", k); err != nil {
+			panic("could not del: " + err.Error())
+		}
+	}
+}
