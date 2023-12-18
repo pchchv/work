@@ -617,3 +617,14 @@ func jobOnQueue(pool *redis.Pool, key string) *Job {
 	}
 	return job
 }
+
+func knownJobs(pool *redis.Pool, key string) []string {
+	conn := pool.Get()
+	defer conn.Close()
+
+	jobNames, err := redis.Strings(conn.Do("SMEMBERS", key))
+	if err != nil {
+		panic(err)
+	}
+	return jobNames
+}
