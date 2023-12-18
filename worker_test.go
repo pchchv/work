@@ -1,6 +1,7 @@
 package work
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -247,4 +248,28 @@ func hgetInt64(pool *redis.Pool, redisKey, hashKey string) int64 {
 		panic("could not HGET int64: " + err.Error())
 	}
 	return v
+}
+
+func jobOnZset(pool *redis.Pool, key string) (int64, *Job) {
+	conn := pool.Get()
+	defer conn.Close()
+
+	v, err := conn.Do("ZRANGE", key, 0, 0, "WITHSCORES")
+	if err != nil {
+		panic("ZRANGE error: " + err.Error())
+	}
+
+	vv := v.([]interface{})
+
+	job, err := newJob(vv[0].([]byte), nil, nil)
+	if err != nil {
+		panic("couldn't get job: " + err.Error())
+	}
+
+	score := vv[1].([]byte)
+	scoreInt, err := strconv.ParseInt(string(score), 10, 64)
+	if err != nil {
+		panic("couldn't parse int: " + err.Error())
+	}
+	return scoreInt, job
 }
