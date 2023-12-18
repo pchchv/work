@@ -173,3 +173,25 @@ func deletePausedAndLockedKeys(namespace, jobName string, pool *redis.Pool) erro
 	}
 	return nil
 }
+
+func getInt64(pool *redis.Pool, key string) int64 {
+	conn := pool.Get()
+	defer conn.Close()
+
+	v, err := redis.Int64(conn.Do("GET", key))
+	if err != nil {
+		panic("could not GET int64: " + err.Error())
+	}
+	return v
+}
+
+func hgetInt64(pool *redis.Pool, redisKey, hashKey string) int64 {
+	conn := pool.Get()
+	defer conn.Close()
+
+	v, err := redis.Int64(conn.Do("HGET", redisKey, hashKey))
+	if err != nil {
+		panic("could not HGET int64: " + err.Error())
+	}
+	return v
+}
