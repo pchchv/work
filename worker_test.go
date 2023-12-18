@@ -361,6 +361,23 @@ func TestWorkersPaused(t *testing.T) {
 	assert.EqualValues(t, 0, len(h))
 }
 
+// Test that in the case of an unavailable Redis server,
+// the worker loop exits in the case of a WorkerPool.Stop
+func TestStop(t *testing.T) {
+	redisPool := &redis.Pool{
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", "notworking:6379", redis.DialConnectTimeout(1*time.Second))
+			if err != nil {
+				return nil, err
+			}
+			return c, nil
+		},
+	}
+	wp := NewWorkerPool(TestContext{}, 10, "work", redisPool)
+	wp.Start()
+	wp.Stop()
+}
+
 func newTestPool(addr string) *redis.Pool {
 	return &redis.Pool{
 		MaxActive:   10,
