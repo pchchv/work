@@ -119,3 +119,54 @@ func TestClientWorkerObservations(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(observations))
 }
+
+func TestClientQueues(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	cleanKeyspace(ns, pool)
+
+	enqueuer := NewEnqueuer(ns, pool)
+	_, err := enqueuer.Enqueue("wat", nil)
+	_, err = enqueuer.Enqueue("foo", nil)
+	_, err = enqueuer.Enqueue("zaz", nil)
+
+	// start a pool to work on it. It's going to work on the queues
+	// side effect of that is knowing which jobs are avail
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp.Job("wat", func(job *Job) error {
+		return nil
+	})
+	wp.Job("foo", func(job *Job) error {
+		return nil
+	})
+	wp.Job("zaz", func(job *Job) error {
+		return nil
+	})
+	wp.Start()
+	time.Sleep(20 * time.Millisecond)
+	wp.Stop()
+
+	setNowEpochSecondsMock(1425263409)
+	defer resetNowEpochSecondsMock()
+	enqueuer.Enqueue("foo", nil)
+	setNowEpochSecondsMock(1425263509)
+	enqueuer.Enqueue("foo", nil)
+	setNowEpochSecondsMock(1425263609)
+	enqueuer.Enqueue("wat", nil)
+
+	setNowEpochSecondsMock(1425263709)
+	client := NewClient(ns, pool)
+	queues, err := client.Queues()
+	assert.NoError(t, err)
+
+	assert.Equal(t, 3, len(queues))
+	assert.Equal(t, "foo", queues[0].JobName)
+	assert.EqualValues(t, 2, queues[0].Count)
+	assert.EqualValues(t, 300, queues[0].Latency)
+	assert.Equal(t, "wat", queues[1].JobName)
+	assert.EqualValues(t, 1, queues[1].Count)
+	assert.EqualValues(t, 100, queues[1].Latency)
+	assert.Equal(t, "zaz", queues[2].JobName)
+	assert.EqualValues(t, 0, queues[2].Count)
+	assert.EqualValues(t, 0, queues[2].Latency)
+}
