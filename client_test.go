@@ -597,6 +597,27 @@ func TestClientRetryAllDeadJobsBig(t *testing.T) {
 	assert.Equal(t, "unknown job when requeueing", job.LastErr)
 }
 
+func TestClientDeleteScheduledJob(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	// delete an invalid job. Make sure we get error
+	client := NewClient(ns, pool)
+	err := client.DeleteScheduledJob(3, "bob")
+	assert.Equal(t, ErrNotDeleted, err)
+
+	// schedule a job. Delete it.
+	enq := NewEnqueuer(ns, pool)
+	j, err := enq.EnqueueIn("foo", 10, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, j)
+
+	err = client.DeleteScheduledJob(j.RunAt, j.ID)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, zsetSize(pool, redisKeyScheduled(ns)))
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
