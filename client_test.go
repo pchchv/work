@@ -618,6 +618,28 @@ func TestClientDeleteScheduledJob(t *testing.T) {
 	assert.EqualValues(t, 0, zsetSize(pool, redisKeyScheduled(ns)))
 }
 
+func TestClientDeleteScheduledUniqueJob(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	// schedule a unique job. Delete it
+	// ensure we can schedule it again
+	enq := NewEnqueuer(ns, pool)
+	j, err := enq.EnqueueUniqueIn("foo", 10, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, j)
+
+	client := NewClient(ns, pool)
+	err = client.DeleteScheduledJob(j.RunAt, j.ID)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, zsetSize(pool, redisKeyScheduled(ns)))
+
+	j, err = enq.EnqueueUniqueIn("foo", 10, nil) // can do it again
+	assert.NoError(t, err)
+	assert.NotNil(t, j) // if nil didn't clear the unique job signature
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
