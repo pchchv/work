@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -118,4 +119,16 @@ func TestWorkerPoolValidations(t *testing.T) {
 
 		wp.Job("wat", TestWorkerPoolValidations)
 	}()
+}
+
+func setupTestWorkerPool(pool *redis.Pool, namespace, jobName string, concurrency int, jobOpts JobOptions) *WorkerPool {
+	deleteQueue(pool, namespace, jobName)
+	deleteRetryAndDead(pool, namespace)
+	deletePausedAndLockedKeys(namespace, jobName, pool)
+
+	wp := NewWorkerPool(TestContext{}, uint(concurrency), namespace, pool)
+	wp.JobWithOptions(jobName, jobOpts, (*TestContext).SleepyJob)
+	// reset the backoff times to help with testing
+	sleepBackoffsInMilliseconds = []int64{10, 10, 10, 10, 10}
+	return wp
 }
