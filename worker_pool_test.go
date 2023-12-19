@@ -164,6 +164,55 @@ func TestWorkersPoolRunSingleThreaded(t *testing.T) {
 	assert.EqualValues(t, 0, hgetInt64(pool, redisKeyJobsLockInfo(ns, job1), wp.workerPoolID))
 }
 
+func TestWorkerPoolPauseSingleThreadedJobs(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns, job1 := "work", "job1"
+	numJobs, concurrency, sleepTime := 5, 5, 2
+	wp := setupTestWorkerPool(pool, ns, job1, concurrency, JobOptions{Priority: 1, MaxConcurrency: 1})
+	wp.Start()
+	// enqueue some jobs
+	enqueuer := NewEnqueuer(ns, pool)
+	for i := 0; i < numJobs; i++ {
+		_, err := enqueuer.Enqueue(job1, Q{"sleep": sleepTime})
+		assert.Nil(t, err)
+	}
+	// provide time for jobs to process
+	time.Sleep(10 * time.Millisecond)
+
+	// pause work, provide time for outstanding jobs to finish and queue up another job
+	pauseJobs(ns, job1, pool)
+	time.Sleep(2 * time.Millisecond)
+	_, err := enqueuer.Enqueue(job1, Q{"sleep": sleepTime})
+	assert.Nil(t, err)
+
+	// check that we still have some jobs to process
+	assert.True(t, listSize(pool, redisKeyJobs(ns, job1)) >= 1)
+
+	// now make sure no jobs get started until we unpause
+	start := time.Now()
+	totalRuntime := time.Duration(sleepTime*numJobs) * time.Millisecond
+	for time.Since(start) < totalRuntime {
+		assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, wp.workerPoolID, job1)))
+		// lock count for the job and lock info for the pool should both be at 1 while job is running
+		assert.EqualValues(t, 0, getInt64(pool, redisKeyJobsLock(ns, job1)))
+		assert.EqualValues(t, 0, hgetInt64(pool, redisKeyJobsLockInfo(ns, job1), wp.workerPoolID))
+		time.Sleep(time.Duration(sleepTime) * time.Millisecond)
+	}
+
+	// unpause work and get past the backoff time
+	unpauseJobs(ns, job1, pool)
+	time.Sleep(10 * time.Millisecond)
+
+	wp.Drain()
+	wp.Stop()
+
+	// At this point it should all be empty.
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobs(ns, job1)))
+	assert.EqualValues(t, 0, listSize(pool, redisKeyJobsInProgress(ns, wp.workerPoolID, job1)))
+	assert.EqualValues(t, 0, getInt64(pool, redisKeyJobsLock(ns, job1)))
+	assert.EqualValues(t, 0, hgetInt64(pool, redisKeyJobsLockInfo(ns, job1), wp.workerPoolID))
+}
+
 func setupTestWorkerPool(pool *redis.Pool, namespace, jobName string, concurrency int, jobOpts JobOptions) *WorkerPool {
 	deleteQueue(pool, namespace, jobName)
 	deleteRetryAndDead(pool, namespace)
