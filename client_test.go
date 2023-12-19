@@ -170,3 +170,51 @@ func TestClientQueues(t *testing.T) {
 	assert.EqualValues(t, 0, queues[2].Count)
 	assert.EqualValues(t, 0, queues[2].Latency)
 }
+
+func TestClientScheduledJobs(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	cleanKeyspace(ns, pool)
+
+	enqueuer := NewEnqueuer(ns, pool)
+
+	setNowEpochSecondsMock(1425263409)
+	defer resetNowEpochSecondsMock()
+	_, err := enqueuer.EnqueueIn("wat", 0, Q{"a": 1, "b": 2})
+	_, err = enqueuer.EnqueueIn("zaz", 4, Q{"a": 3, "b": 4})
+	_, err = enqueuer.EnqueueIn("foo", 2, Q{"a": 3, "b": 4})
+
+	client := NewClient(ns, pool)
+	jobs, count, err := client.ScheduledJobs(1)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(jobs))
+	assert.EqualValues(t, 3, count)
+	if len(jobs) == 3 {
+		assert.EqualValues(t, 1425263409, jobs[0].RunAt)
+		assert.EqualValues(t, 1425263411, jobs[1].RunAt)
+		assert.EqualValues(t, 1425263413, jobs[2].RunAt)
+
+		assert.Equal(t, "wat", jobs[0].Name)
+		assert.Equal(t, "foo", jobs[1].Name)
+		assert.Equal(t, "zaz", jobs[2].Name)
+
+		assert.EqualValues(t, 1425263409, jobs[0].EnqueuedAt)
+		assert.EqualValues(t, 1425263409, jobs[1].EnqueuedAt)
+		assert.EqualValues(t, 1425263409, jobs[2].EnqueuedAt)
+
+		assert.EqualValues(t, interface{}(1), jobs[0].Args["a"])
+		assert.EqualValues(t, interface{}(2), jobs[0].Args["b"])
+
+		assert.EqualValues(t, 0, jobs[0].Fails)
+		assert.EqualValues(t, 0, jobs[1].Fails)
+		assert.EqualValues(t, 0, jobs[2].Fails)
+
+		assert.EqualValues(t, 0, jobs[0].FailedAt)
+		assert.EqualValues(t, 0, jobs[1].FailedAt)
+		assert.EqualValues(t, 0, jobs[2].FailedAt)
+
+		assert.Equal(t, "", jobs[0].LastErr)
+		assert.Equal(t, "", jobs[1].LastErr)
+		assert.Equal(t, "", jobs[2].LastErr)
+	}
+}
