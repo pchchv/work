@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -312,4 +313,30 @@ func TestClientDeadJobs(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(jobs))
 	assert.EqualValues(t, 0, count)
+}
+
+func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
+	job := &Job{
+		Name:       name,
+		ID:         makeIdentifier(),
+		EnqueuedAt: encAt,
+		Args:       nil,
+		Fails:      3,
+		LastErr:    "sorry",
+		FailedAt:   failAt,
+	}
+
+	rawJSON, _ := job.serialize()
+
+	conn := pool.Get()
+	defer conn.Close()
+	_, err := conn.Do("ZADD", redisKeyDead(ns), failAt, rawJSON)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	if _, err := conn.Do("SADD", redisKeyKnownJobs(ns), name); err != nil {
+		panic(err)
+	}
+	return job
 }
