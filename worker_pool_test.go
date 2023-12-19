@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -18,6 +19,13 @@ type tstCtx struct {
 
 func (c *tstCtx) record(s string) {
 	_, _ = c.WriteString(s)
+}
+
+// Test helper.
+func (t *TestContext) SleepyJob(job *Job) error {
+	sleepTime := time.Duration(job.ArgInt64("sleep"))
+	time.Sleep(sleepTime * time.Millisecond)
+	return nil
 }
 
 func TestWorkerPoolHandlerValidations(t *testing.T) {
