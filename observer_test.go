@@ -48,6 +48,33 @@ func TestObserverStartedDone(t *testing.T) {
 	assert.Equal(t, 0, len(h))
 }
 
+func TestObserverCheckin(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+
+	observer := newObserver(ns, pool, "abcd")
+	observer.start()
+
+	tMock := int64(1425263401)
+	setNowEpochSecondsMock(tMock)
+	defer resetNowEpochSecondsMock()
+	observer.observeStarted("foo", "bar", Q{"a": 1, "b": "wat"})
+
+	tMockCheckin := int64(1425263402)
+	setNowEpochSecondsMock(tMockCheckin)
+	observer.observeCheckin("foo", "bar", "doin it")
+	observer.drain()
+	observer.stop()
+
+	h := readHash(pool, redisKeyWorkerObservation(ns, "abcd"))
+	assert.Equal(t, "foo", h["job_name"])
+	assert.Equal(t, "bar", h["job_id"])
+	assert.Equal(t, fmt.Sprint(tMock), h["started_at"])
+	assert.Equal(t, `{"a":1,"b":"wat"}`, h["args"])
+	assert.Equal(t, "doin it", h["checkin"])
+	assert.Equal(t, fmt.Sprint(tMockCheckin), h["checkin_at"])
+}
+
 func readHash(pool *redis.Pool, key string) map[string]string {
 	m := make(map[string]string)
 
