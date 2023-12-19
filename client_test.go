@@ -368,3 +368,18 @@ func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64
 	}
 	return job
 }
+
+func getQueuedJob(ns string, pool *redis.Pool, name string) *Job {
+	conn := pool.Get()
+	defer conn.Close()
+	jobBytes, err := redis.Bytes(conn.Do("RPOP", redisKeyJobsPrefix(ns)+name))
+	if err != nil {
+		return nil
+	}
+
+	job, err := newJob(jobBytes, nil, nil)
+	if err != nil {
+		return nil
+	}
+	return job
+}
