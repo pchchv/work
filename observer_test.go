@@ -1,6 +1,33 @@
 package work
 
-import "github.com/gomodule/redigo/redis"
+import (
+	"fmt"
+	"testing"
+
+	"github.com/gomodule/redigo/redis"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestObserverStarted(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+
+	tMock := int64(1425263401)
+	setNowEpochSecondsMock(tMock)
+	defer resetNowEpochSecondsMock()
+
+	observer := newObserver(ns, pool, "abcd")
+	observer.start()
+	observer.observeStarted("foo", "bar", Q{"a": 1, "b": "wat"})
+	observer.drain()
+	observer.stop()
+
+	h := readHash(pool, redisKeyWorkerObservation(ns, "abcd"))
+	assert.Equal(t, "foo", h["job_name"])
+	assert.Equal(t, "bar", h["job_id"])
+	assert.Equal(t, fmt.Sprint(tMock), h["started_at"])
+	assert.Equal(t, `{"a":1,"b":"wat"}`, h["args"])
+}
 
 func readHash(pool *redis.Pool, key string) map[string]string {
 	m := make(map[string]string)
