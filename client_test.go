@@ -469,6 +469,64 @@ func TestClientDeleteAllDeadJobs(t *testing.T) {
 	assert.EqualValues(t, 0, count)
 }
 
+func TestClientRetryAllDeadJobs(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	setNowEpochSecondsMock(1425263409)
+	defer resetNowEpochSecondsMock()
+
+	insertDeadJob(ns, pool, "wat1", 12345, 12347)
+	insertDeadJob(ns, pool, "wat2", 12345, 12347)
+	insertDeadJob(ns, pool, "wat3", 12345, 12349)
+	insertDeadJob(ns, pool, "wat4", 12345, 12350)
+
+	client := NewClient(ns, pool)
+	jobs, count, err := client.DeadJobs(1)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 4, len(jobs))
+	assert.EqualValues(t, 4, count)
+
+	err = client.RetryAllDeadJobs()
+	assert.NoError(t, err)
+	_, count, err = client.DeadJobs(1)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, count)
+
+	job := getQueuedJob(ns, pool, "wat1")
+	assert.NotNil(t, job)
+	assert.Equal(t, "wat1", job.Name)
+	assert.EqualValues(t, 1425263409, job.EnqueuedAt)
+	assert.EqualValues(t, 0, job.Fails)
+	assert.Equal(t, "", job.LastErr)
+	assert.EqualValues(t, 0, job.FailedAt)
+
+	job = getQueuedJob(ns, pool, "wat2")
+	assert.NotNil(t, job)
+	assert.Equal(t, "wat2", job.Name)
+	assert.EqualValues(t, 1425263409, job.EnqueuedAt)
+	assert.EqualValues(t, 0, job.Fails)
+	assert.Equal(t, "", job.LastErr)
+	assert.EqualValues(t, 0, job.FailedAt)
+
+	job = getQueuedJob(ns, pool, "wat3")
+	assert.NotNil(t, job)
+	assert.Equal(t, "wat3", job.Name)
+	assert.EqualValues(t, 1425263409, job.EnqueuedAt)
+	assert.EqualValues(t, 0, job.Fails)
+	assert.Equal(t, "", job.LastErr)
+	assert.EqualValues(t, 0, job.FailedAt)
+
+	job = getQueuedJob(ns, pool, "wat4")
+	assert.NotNil(t, job)
+	assert.Equal(t, "wat4", job.Name)
+	assert.EqualValues(t, 1425263409, job.EnqueuedAt)
+	assert.EqualValues(t, 0, job.Fails)
+	assert.Equal(t, "", job.LastErr)
+	assert.EqualValues(t, 0, job.FailedAt)
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
