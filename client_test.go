@@ -443,6 +443,32 @@ func TestClientRetryDeadJobWithArgs(t *testing.T) {
 	}
 }
 
+func TestClientDeleteAllDeadJobs(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	// Insert a dead job:
+	insertDeadJob(ns, pool, "wat", 12345, 12347)
+	insertDeadJob(ns, pool, "wat", 12345, 12347)
+	insertDeadJob(ns, pool, "wat", 12345, 12349)
+	insertDeadJob(ns, pool, "wat", 12345, 12350)
+
+	client := NewClient(ns, pool)
+	jobs, count, err := client.DeadJobs(1)
+	assert.NoError(t, err)
+	assert.Equal(t, 4, len(jobs))
+	assert.EqualValues(t, 4, count)
+
+	err = client.DeleteAllDeadJobs()
+	assert.NoError(t, err)
+
+	jobs, count, err = client.DeadJobs(1)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(jobs))
+	assert.EqualValues(t, 0, count)
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
