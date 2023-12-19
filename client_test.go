@@ -640,6 +640,40 @@ func TestClientDeleteScheduledUniqueJob(t *testing.T) {
 	assert.NotNil(t, j) // if nil didn't clear the unique job signature
 }
 
+func TestClientDeleteRetryJob(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	setNowEpochSecondsMock(1425263409)
+	defer resetNowEpochSecondsMock()
+
+	enqueuer := NewEnqueuer(ns, pool)
+	job, err := enqueuer.Enqueue("wat", Q{"a": 1, "b": 2})
+	assert.Nil(t, err)
+
+	setNowEpochSecondsMock(1425263429)
+
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+	wp.Job("wat", func(job *Job) error {
+		return errors.New("ohno")
+	})
+	wp.Start()
+	wp.Drain()
+	wp.Stop()
+
+	// now have a retry job
+	client := NewClient(ns, pool)
+	jobs, count, err := client.RetryJobs(1)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(jobs))
+	if assert.EqualValues(t, 1, count) {
+		err = client.DeleteRetryJob(jobs[0].RetryAt, job.ID)
+		assert.NoError(t, err)
+		assert.EqualValues(t, 0, zsetSize(pool, redisKeyRetry(ns)))
+	}
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
