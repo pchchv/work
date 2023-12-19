@@ -2,8 +2,11 @@ package work
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var tstCtxType = reflect.TypeOf(tstCtx{})
@@ -77,4 +80,34 @@ func TestWorkerPoolStartStop(t *testing.T) {
 	wp.Stop()
 	wp.Start()
 	wp.Stop()
+}
+
+func TestWorkerPoolValidations(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	wp := NewWorkerPool(TestContext{}, 10, ns, pool)
+
+	func() {
+		defer func() {
+			if panicErr := recover(); panicErr != nil {
+				assert.Regexp(t, "Your middleware function can have one of these signatures", fmt.Sprintf("%v", panicErr))
+			} else {
+				t.Errorf("expected a panic when using bad middleware")
+			}
+		}()
+
+		wp.Middleware(TestWorkerPoolValidations)
+	}()
+
+	func() {
+		defer func() {
+			if panicErr := recover(); panicErr != nil {
+				assert.Regexp(t, "Your handler function can have one of these signatures", fmt.Sprintf("%v", panicErr))
+			} else {
+				t.Errorf("expected a panic when using a bad handler")
+			}
+		}()
+
+		wp.Job("wat", TestWorkerPoolValidations)
+	}()
 }
