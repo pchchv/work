@@ -399,6 +399,50 @@ func TestClientRetryDeadJob(t *testing.T) {
 	assert.EqualValues(t, 0, job1.FailedAt)
 }
 
+func TestClientRetryDeadJobWithArgs(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	// enqueue a job with arguments
+	name := "foobar"
+	encAt := int64(12345)
+	failAt := int64(12347)
+	job := &Job{
+		Name:       name,
+		ID:         makeIdentifier(),
+		EnqueuedAt: encAt,
+		Args:       map[string]interface{}{"a": "wat"},
+		Fails:      3,
+		LastErr:    "sorry",
+		FailedAt:   failAt,
+	}
+
+	rawJSON, _ := job.serialize()
+
+	conn := pool.Get()
+	defer conn.Close()
+	_, err := conn.Do("ZADD", redisKeyDead(ns), failAt, rawJSON)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	if _, err := conn.Do("SADD", redisKeyKnownJobs(ns), name); err != nil {
+		panic(err)
+	}
+
+	client := NewClient(ns, pool)
+	err = client.RetryDeadJob(failAt, job.ID)
+	assert.NoError(t, err)
+
+	job1 := getQueuedJob(ns, pool, name)
+	if assert.NotNil(t, job1) {
+		assert.Equal(t, name, job1.Name)
+		assert.Equal(t, "wat", job1.ArgString("a"))
+		assert.NoError(t, job1.ArgError())
+	}
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
