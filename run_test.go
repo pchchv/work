@@ -1,6 +1,7 @@
 package work
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -108,4 +109,63 @@ func TestRunHandlerPanic(t *testing.T) {
 	_, err := runJob(job, tstCtxType, middleware, jt)
 	assert.Error(t, err)
 	assert.Equal(t, "dayam", err.Error())
+}
+
+func TestRunMiddlewareError(t *testing.T) {
+	mw1 := func(j *Job, next NextMiddlewareFunc) error {
+		return errors.New("mw1_err")
+	}
+	h1 := func(c *tstCtx, j *Job) error {
+		c.record("h1")
+		return errors.New("h1_err")
+	}
+
+	middleware := []*middlewareHandler{
+		{IsGeneric: true, GenericMiddlewareHandler: mw1},
+	}
+
+	jt := &jobType{
+		Name:           "foo",
+		IsGeneric:      false,
+		DynamicHandler: reflect.ValueOf(h1),
+	}
+
+	job := &Job{
+		Name: "foo",
+	}
+
+	_, err := runJob(job, tstCtxType, middleware, jt)
+	assert.Error(t, err)
+	assert.Equal(t, "mw1_err", err.Error())
+}
+
+func TestRunHandlerError(t *testing.T) {
+	mw1 := func(j *Job, next NextMiddlewareFunc) error {
+		return next()
+	}
+	h1 := func(c *tstCtx, j *Job) error {
+		c.record("h1")
+		return errors.New("h1_err")
+	}
+
+	middleware := []*middlewareHandler{
+		{IsGeneric: true, GenericMiddlewareHandler: mw1},
+	}
+
+	jt := &jobType{
+		Name:           "foo",
+		IsGeneric:      false,
+		DynamicHandler: reflect.ValueOf(h1),
+	}
+
+	job := &Job{
+		Name: "foo",
+	}
+
+	v, err := runJob(job, tstCtxType, middleware, jt)
+	assert.Error(t, err)
+	assert.Equal(t, "h1_err", err.Error())
+
+	c := v.Interface().(*tstCtx)
+	assert.Equal(t, "h1", c.String())
 }
