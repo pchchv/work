@@ -52,3 +52,31 @@ func TestRunBasicMiddleware(t *testing.T) {
 	c := v.Interface().(*tstCtx)
 	assert.Equal(t, "mw1mw2mw3h1foo", c.String())
 }
+
+func TestRunMiddlewarePanic(t *testing.T) {
+	mw1 := func(j *Job, next NextMiddlewareFunc) error {
+		panic("dayam")
+	}
+	h1 := func(c *tstCtx, j *Job) error {
+		c.record("h1")
+		return nil
+	}
+
+	middleware := []*middlewareHandler{
+		{IsGeneric: true, GenericMiddlewareHandler: mw1},
+	}
+
+	jt := &jobType{
+		Name:           "foo",
+		IsGeneric:      false,
+		DynamicHandler: reflect.ValueOf(h1),
+	}
+
+	job := &Job{
+		Name: "foo",
+	}
+
+	_, err := runJob(job, tstCtxType, middleware, jt)
+	assert.Error(t, err)
+	assert.Equal(t, "dayam", err.Error())
+}
