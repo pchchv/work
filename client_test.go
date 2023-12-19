@@ -343,6 +343,62 @@ func TestClientDeleteDeadJob(t *testing.T) {
 	}
 }
 
+func TestClientRetryDeadJob(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "testwork"
+	cleanKeyspace(ns, pool)
+
+	// Insert a dead job:
+	insertDeadJob(ns, pool, "wat1", 12345, 12347)
+	insertDeadJob(ns, pool, "wat2", 12345, 12347)
+	insertDeadJob(ns, pool, "wat3", 12345, 12349)
+	insertDeadJob(ns, pool, "wat4", 12345, 12350)
+
+	client := NewClient(ns, pool)
+	jobs, count, err := client.DeadJobs(1)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 4, len(jobs))
+	assert.EqualValues(t, 4, count)
+
+	tot := count
+	for _, j := range jobs {
+		err = client.RetryDeadJob(j.DiedAt, j.ID)
+		assert.NoError(t, err)
+		_, count, err = client.DeadJobs(1)
+		assert.NoError(t, err)
+		assert.Equal(t, tot-1, count)
+		tot--
+	}
+
+	job1 := getQueuedJob(ns, pool, "wat1")
+	assert.NotNil(t, job1)
+	assert.Equal(t, "wat1", job1.Name)
+	assert.EqualValues(t, 0, job1.Fails)
+	assert.Equal(t, "", job1.LastErr)
+	assert.EqualValues(t, 0, job1.FailedAt)
+
+	job1 = getQueuedJob(ns, pool, "wat2")
+	assert.NotNil(t, job1)
+	assert.Equal(t, "wat2", job1.Name)
+	assert.EqualValues(t, 0, job1.Fails)
+	assert.Equal(t, "", job1.LastErr)
+	assert.EqualValues(t, 0, job1.FailedAt)
+
+	job1 = getQueuedJob(ns, pool, "wat3")
+	assert.NotNil(t, job1)
+	assert.Equal(t, "wat3", job1.Name)
+	assert.EqualValues(t, 0, job1.Fails)
+	assert.Equal(t, "", job1.LastErr)
+	assert.EqualValues(t, 0, job1.FailedAt)
+
+	job1 = getQueuedJob(ns, pool, "wat4")
+	assert.NotNil(t, job1)
+	assert.Equal(t, "wat4", job1.Name)
+	assert.EqualValues(t, 0, job1.Fails)
+	assert.Equal(t, "", job1.LastErr)
+	assert.EqualValues(t, 0, job1.FailedAt)
+}
+
 func insertDeadJob(ns string, pool *redis.Pool, name string, encAt, failAt int64) *Job {
 	job := &Job{
 		Name:       name,
