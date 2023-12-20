@@ -209,3 +209,46 @@ func TestJobArgumentExtractionBadInt(t *testing.T) {
 		j.argError = nil
 	}
 }
+
+func TestJobArgumentExtractionBadFloat(t *testing.T) {
+	var testCases = []struct {
+		key  string
+		val  interface{}
+		good bool
+	}{
+		{"a", "boo", false},
+		{"b", true, false},
+
+		{"z", 0, true},
+		{"y", 9007199254740892, true},
+		{"x", 9007199254740892.0, true},
+		{"w", 573839921, true},
+		{"v", -573839921, true},
+		{"u", math.MaxFloat64, true},
+		{"t", math.SmallestNonzeroFloat64, true},
+	}
+
+	j := Job{}
+
+	for _, tc := range testCases {
+		j.setArg(tc.key, tc.val)
+	}
+
+	for _, tc := range testCases {
+		r := j.ArgFloat64(tc.key)
+		err := j.ArgError()
+		if tc.good {
+			if err != nil {
+				t.Errorf("Failed test case: %v; err = %v\n", tc, err)
+			}
+		} else {
+			if err == nil {
+				t.Errorf("Failed test case: %v; but err was nil\n", tc)
+			}
+			if r != 0 {
+				t.Errorf("Failed test case: %v; but r was %v\n", tc, r)
+			}
+		}
+		j.argError = nil
+	}
+}
