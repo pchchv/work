@@ -38,3 +38,21 @@ func TestPrioritySampler(t *testing.T) {
 	assert.True(t, c1 >= (total/13), fmt.Sprintf("c1 = %d total = %d total/13=%d", c1, total, total/13))
 	assert.True(t, float64(c1end) > (float64(total)*0.50))
 }
+
+func BenchmarkPrioritySampler(b *testing.B) {
+	ps := prioritySampler{}
+	for i := 0; i < 200; i++ {
+		ps.add(uint(i)+1,
+			"jobs."+fmt.Sprint(i),
+			"jobsinprog."+fmt.Sprint(i),
+			"jobspaused."+fmt.Sprint(i),
+			"jobslock."+fmt.Sprint(i),
+			"jobslockinfo."+fmt.Sprint(i),
+			"jobsmaxconcurrency."+fmt.Sprint(i))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ps.sample()
+	}
+}
