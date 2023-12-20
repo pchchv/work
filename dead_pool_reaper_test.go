@@ -293,3 +293,55 @@ func TestDeadPoolReaperWithWorkerPools(t *testing.T) {
 	staleHeart.stop()
 	wp.deadPoolReaper.stop()
 }
+
+func TestDeadPoolReaperCleanStaleLocks(t *testing.T) {
+	pool := newTestPool(":6379")
+	ns := "work"
+	cleanKeyspace(ns, pool)
+
+	conn := pool.Get()
+	defer conn.Close()
+	job1, job2 := "type1", "type2"
+	jobNames := []string{job1, job2}
+	workerPoolID1, workerPoolID2 := "1", "2"
+	lock1 := redisKeyJobsLock(ns, job1)
+	lock2 := redisKeyJobsLock(ns, job2)
+	lockInfo1 := redisKeyJobsLockInfo(ns, job1)
+	lockInfo2 := redisKeyJobsLockInfo(ns, job2)
+
+	// Create redis data
+	var err error
+	err = conn.Send("SET", lock1, 3)
+	assert.NoError(t, err)
+	err = conn.Send("SET", lock2, 1)
+	assert.NoError(t, err)
+	err = conn.Send("HSET", lockInfo1, workerPoolID1, 1) // workerPoolID1 holds 1 lock on job1
+	assert.NoError(t, err)
+	err = conn.Send("HSET", lockInfo1, workerPoolID2, 2) // workerPoolID2 holds 2 locks on job1
+	assert.NoError(t, err)
+	err = conn.Send("HSET", lockInfo2, workerPoolID2, 2) // test that we don't go below 0 on job2 lock
+	assert.NoError(t, err)
+	err = conn.Flush()
+	assert.NoError(t, err)
+
+	reaper := newDeadPoolReaper(ns, pool, jobNames)
+	// clean lock info for workerPoolID1
+	reaper.cleanStaleLockInfo(workerPoolID1, jobNames)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 2, getInt64(pool, lock1))   // job1 lock should be decr by 1
+	assert.EqualValues(t, 1, getInt64(pool, lock2))   // job2 lock is unchanged
+	v, _ := conn.Do("HGET", lockInfo1, workerPoolID1) // workerPoolID1 removed from job1's lock info
+	assert.Nil(t, v)
+
+	// now clean lock info for workerPoolID2
+	reaper.cleanStaleLockInfo(workerPoolID2, jobNames)
+	assert.NoError(t, err)
+	// both locks should be at 0
+	assert.EqualValues(t, 0, getInt64(pool, lock1))
+	assert.EqualValues(t, 0, getInt64(pool, lock2))
+	// worker pool ID 2 removed from both lock info hashes
+	v, err = conn.Do("HGET", lockInfo1, workerPoolID2)
+	assert.Nil(t, v)
+	v, err = conn.Do("HGET", lockInfo2, workerPoolID2)
+	assert.Nil(t, v)
+}
