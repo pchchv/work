@@ -83,3 +83,42 @@ func TestJobArgumentExtraction(t *testing.T) {
 	_ = j.ArgFloat64("float1")
 	assert.Error(t, j.ArgError())
 }
+
+func TestJobArgumentExtractionBadString(t *testing.T) {
+	var testCases = []struct {
+		key  string
+		val  interface{}
+		good bool
+	}{
+		{"a", 1, false},
+		{"b", false, false},
+		{"c", "yay", true},
+	}
+
+	j := Job{}
+
+	for _, tc := range testCases {
+		j.setArg(tc.key, tc.val)
+	}
+
+	for _, tc := range testCases {
+		r := j.ArgString(tc.key)
+		err := j.ArgError()
+		if tc.good {
+			if err != nil {
+				t.Errorf("Failed test case: %v; err = %v\n", tc, err)
+			}
+			if r != tc.val.(string) {
+				t.Errorf("Failed test case: %v; r = %v\n", tc, r)
+			}
+		} else {
+			if err == nil {
+				t.Errorf("Failed test case: %v; but err was nil\n", tc)
+			}
+			if r != "" {
+				t.Errorf("Failed test case: %v; but r was %v\n", tc, r)
+			}
+		}
+		j.argError = nil
+	}
+}
