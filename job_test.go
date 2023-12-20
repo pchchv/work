@@ -122,3 +122,43 @@ func TestJobArgumentExtractionBadString(t *testing.T) {
 		j.argError = nil
 	}
 }
+
+func TestJobArgumentExtractionBadBool(t *testing.T) {
+	var testCases = []struct {
+		key  string
+		val  interface{}
+		good bool
+	}{
+		{"a", 1, false},
+		{"b", "boo", false},
+		{"c", true, true},
+		{"d", false, true},
+	}
+
+	j := Job{}
+
+	for _, tc := range testCases {
+		j.setArg(tc.key, tc.val)
+	}
+
+	for _, tc := range testCases {
+		r := j.ArgBool(tc.key)
+		err := j.ArgError()
+		if tc.good {
+			if err != nil {
+				t.Errorf("Failed test case: %v; err = %v\n", tc, err)
+			}
+			if r != tc.val.(bool) {
+				t.Errorf("Failed test case: %v; r = %v\n", tc, r)
+			}
+		} else {
+			if err == nil {
+				t.Errorf("Failed test case: %v; but err was nil\n", tc)
+			}
+			if r != false {
+				t.Errorf("Failed test case: %v; but r was %v\n", tc, r)
+			}
+		}
+		j.argError = nil
+	}
+}
