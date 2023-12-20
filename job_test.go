@@ -1,6 +1,7 @@
 package work
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -156,6 +157,52 @@ func TestJobArgumentExtractionBadBool(t *testing.T) {
 				t.Errorf("Failed test case: %v; but err was nil\n", tc)
 			}
 			if r != false {
+				t.Errorf("Failed test case: %v; but r was %v\n", tc, r)
+			}
+		}
+		j.argError = nil
+	}
+}
+
+func TestJobArgumentExtractionBadInt(t *testing.T) {
+	var testCases = []struct {
+		key  string
+		val  interface{}
+		good bool
+	}{
+		{"a", "boo", false},
+		{"b", true, false},
+		{"c", 1.1, false},
+		{"d", 19007199254740892.0, false},
+		{"e", -19007199254740892.0, false},
+		{"f", uint64(math.MaxInt64) + 1, false},
+
+		{"z", 0, true},
+		{"y", 9007199254740892, true},
+		{"x", 9007199254740892.0, true},
+		{"w", 573839921, true},
+		{"v", -573839921, true},
+		{"u", uint64(math.MaxInt64), true},
+	}
+
+	j := Job{}
+
+	for _, tc := range testCases {
+		j.setArg(tc.key, tc.val)
+	}
+
+	for _, tc := range testCases {
+		r := j.ArgInt64(tc.key)
+		err := j.ArgError()
+		if tc.good {
+			if err != nil {
+				t.Errorf("Failed test case: %v; err = %v\n", tc, err)
+			}
+		} else {
+			if err == nil {
+				t.Errorf("Failed test case: %v; but err was nil\n", tc)
+			}
+			if r != 0 {
 				t.Errorf("Failed test case: %v; but r was %v\n", tc, r)
 			}
 		}
