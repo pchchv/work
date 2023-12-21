@@ -9,6 +9,5 @@ Jobs are durable and supported by Redis.
 * If a job fails, it will be retried a certain number of times.
 * Scheduling jobs for the future.
 * Enqueue unique jobs so that only one job with a given name/arguments is in the queue at once.
-* Web interface to manage failed jobs and monitor system performance.
 * Periodic queuing of jobs on a cron-like schedule.
 * Pause/unpause jobs and control concurrency within and across processes.
